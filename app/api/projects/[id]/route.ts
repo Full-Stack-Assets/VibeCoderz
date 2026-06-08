@@ -1,6 +1,7 @@
 import { getDb, schema } from '@/db/client'
 import { eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 
 export async function GET(
   req: NextRequest,
@@ -8,7 +9,7 @@ export async function GET(
 ) {
   const { id } = await params
   try {
-    const db = getDb()
+    const db = await getDb()
     const project = await db.query.projects.findFirst({
       where: eq(schema.projects.id, id),
       with: {
@@ -34,12 +35,17 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const checkResult = await checkBotId()
+  if (checkResult.isBot) {
+    return NextResponse.json({ error: 'Bot detected' }, { status: 403 })
+  }
+
   const { id } = await params
   try {
     const body = await req.json()
     const { name, description, code, status } = body
 
-    const db = getDb()
+    const db = await getDb()
     const result = await db
       .update(schema.projects)
       .set({
@@ -66,9 +72,14 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const checkResult = await checkBotId()
+  if (checkResult.isBot) {
+    return NextResponse.json({ error: 'Bot detected' }, { status: 403 })
+  }
+
   const { id } = await params
   try {
-    const db = getDb()
+    const db = await getDb()
     await db.delete(schema.projects).where(eq(schema.projects.id, id))
 
     return NextResponse.json({ success: true })

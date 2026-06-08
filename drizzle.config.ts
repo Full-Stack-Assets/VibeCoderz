@@ -6,5 +6,6 @@ export default {
   dialect: 'turso',
   dbCredentials: {
     url: process.env.DATABASE_URL || 'file:./vibe.db',
+    authToken: process.env.DATABASE_AUTH_TOKEN,
   },
 } satisfies Config

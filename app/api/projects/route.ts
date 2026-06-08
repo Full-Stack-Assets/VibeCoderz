@@ -1,10 +1,10 @@
 import { getDb, schema } from '@/db/client'
-import { eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 
 export async function GET(req: NextRequest) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const projects = await db.query.projects.findMany({
       orderBy: (projects, { desc }) => [desc(projects.createdAt)],
     })
@@ -19,11 +19,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const checkResult = await checkBotId()
+  if (checkResult.isBot) {
+    return NextResponse.json({ error: 'Bot detected' }, { status: 403 })
+  }
+
   try {
     const body = await req.json()
     const { name, description, prompt, code, modelUsed, sandboxId } = body
 
-    const db = getDb()
+    const db = await getDb()
     const result = await db
       .insert(schema.projects)
       .values({

@@ -15,7 +15,7 @@ export const saveProjectTool = tool({
   }),
   execute: async ({ name, description, prompt, code, sandboxId, modelUsed }) => {
     try {
-      const db = getDb()
+      const db = await getDb()
       const result = await db
         .insert(schema.projects)
         .values({
