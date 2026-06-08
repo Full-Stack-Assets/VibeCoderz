@@ -1,17 +1,14 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/libsql'
+import { createClient } from '@libsql/client'
 import * as schema from './schema'
-import path from 'path'
 
-type DB = ReturnType<typeof drizzle<typeof schema>>
+let db: ReturnType<typeof drizzle<typeof schema>> | null = null
 
-let db: DB | null = null
-
-export function getDb(): DB {
+export function getDb() {
   if (!db) {
-    const dbPath = process.env.DATABASE_URL || path.join(process.cwd(), 'vibe.db')
-    const sqlite = new Database(dbPath)
-    db = drizzle(sqlite, { schema })
+    const url = process.env.DATABASE_URL || 'file:./vibe.db'
+    const client = createClient({ url })
+    db = drizzle(client, { schema })
   }
   return db
 }
