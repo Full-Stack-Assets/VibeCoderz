@@ -4,6 +4,8 @@ import { createSandbox } from './create-sandbox'
 import { generateFiles } from './generate-files'
 import { getSandboxURL } from './get-sandbox-url'
 import { runCommand } from './run-command'
+import { pushToGithubTool } from './push-to-github'
+import { saveProjectTool } from './save-project'
 
 interface Params {
   modelId: string
@@ -16,6 +18,8 @@ export function tools({ modelId, writer }: Params) {
     generateFiles: generateFiles({ writer, modelId }),
     getSandboxURL: getSandboxURL({ writer }),
     runCommand: runCommand({ writer }),
+    pushToGithub: pushToGithubTool,
+    saveProject: saveProjectTool,
   }
 }
 
