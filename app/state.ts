@@ -4,6 +4,7 @@ import type { ChatStatus, DataUIPart } from 'ai'
 import { useMonitorState } from '@/components/error-monitor/state'
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 interface SandboxStore {
   addGeneratedFiles: (files: string[]) => void
@@ -11,10 +12,13 @@ interface SandboxStore {
   addPaths: (paths: string[]) => void
   chatStatus: ChatStatus
   clearGeneratedFiles: () => void
+  clearSession: () => void
   commands: Command[]
   generatedFiles: Set<string>
   paths: string[]
   sandboxId?: string
+  savedProjectId?: string
+  setSavedProjectId: (id: string) => void
   setChatStatus: (status: ChatStatus) => void
   setSandboxId: (id: string) => void
   setStatus: (status: 'running' | 'stopped') => void
@@ -43,59 +47,96 @@ export function useCommandErrorsLogs() {
   return { errors }
 }
 
-export const useSandboxStore = create<SandboxStore>()((set) => ({
-  addGeneratedFiles: (files) =>
-    set((state) => ({
-      generatedFiles: new Set([...state.generatedFiles, ...files]),
-    })),
-  addLog: (data) => {
-    set((state) => {
-      const idx = state.commands.findIndex((c) => c.cmdId === data.cmdId)
-      if (idx === -1) {
-        console.warn(`Command with ID ${data.cmdId} not found.`)
-        return state
-      }
-      const updatedCmds = [...state.commands]
-      updatedCmds[idx] = {
-        ...updatedCmds[idx],
-        logs: [...(updatedCmds[idx].logs ?? []), data.log],
-      }
-      return { commands: updatedCmds }
-    })
-  },
-  addPaths: (paths) =>
-    set((state) => ({ paths: [...new Set([...state.paths, ...paths])] })),
-  chatStatus: 'ready',
-  clearGeneratedFiles: () => set(() => ({ generatedFiles: new Set<string>() })),
-  commands: [],
+const PERSISTED_SANDBOX_KEYS: (keyof SandboxStore)[] = [
+  'sandboxId',
+  'url',
+  'urlUUID',
+  'paths',
+  'status',
+  'savedProjectId',
+]
+
+const initialSandboxState = {
+  chatStatus: 'ready' as ChatStatus,
+  commands: [] as Command[],
   generatedFiles: new Set<string>(),
-  paths: [],
-  setChatStatus: (status) =>
-    set((state) =>
-      state.chatStatus === status ? state : { chatStatus: status }
-    ),
-  setSandboxId: (sandboxId) =>
-    set(() => ({
-      sandboxId,
-      status: 'running',
-      commands: [],
-      paths: [],
-      url: undefined,
-      generatedFiles: new Set<string>(),
-    })),
-  setStatus: (status) => set(() => ({ status })),
-  setUrl: (url, urlUUID) => set(() => ({ url, urlUUID })),
-  upsertCommand: (cmd) => {
-    set((state) => {
-      const existingIdx = state.commands.findIndex((c) => c.cmdId === cmd.cmdId)
-      const idx = existingIdx !== -1 ? existingIdx : state.commands.length
-      const prev = state.commands[idx] ?? { startedAt: Date.now(), logs: [] }
-      const cmds = [...state.commands]
-      cmds[idx] = { ...prev, ...cmd }
-      return { commands: cmds }
-    })
-  },
-}))
+  paths: [] as string[],
+  sandboxId: undefined,
+  savedProjectId: undefined,
+  status: undefined,
+  url: undefined,
+  urlUUID: undefined,
+}
+
+export const useSandboxStore = create<SandboxStore>()(
+  persist(
+    (set) => ({
+      ...initialSandboxState,
+      addGeneratedFiles: (files) =>
+        set((state) => ({
+          generatedFiles: new Set([...state.generatedFiles, ...files]),
+        })),
+      addLog: (data) => {
+        set((state) => {
+          const idx = state.commands.findIndex((c) => c.cmdId === data.cmdId)
+          if (idx === -1) {
+            console.warn(`Command with ID ${data.cmdId} not found.`)
+            return state
+          }
+          const updatedCmds = [...state.commands]
+          updatedCmds[idx] = {
+            ...updatedCmds[idx],
+            logs: [...(updatedCmds[idx].logs ?? []), data.log],
+          }
+          return { commands: updatedCmds }
+        })
+      },
+      addPaths: (paths) =>
+        set((state) => ({ paths: [...new Set([...state.paths, ...paths])] })),
+      clearGeneratedFiles: () => set(() => ({ generatedFiles: new Set<string>() })),
+      clearSession: () => {
+        localStorage.removeItem('chat-messages')
+        localStorage.removeItem('prompt-input')
+        set(() => ({ ...initialSandboxState, generatedFiles: new Set<string>() }))
+      },
+      setSavedProjectId: (id) => set(() => ({ savedProjectId: id })),
+      setChatStatus: (status) =>
+        set((state) =>
+          state.chatStatus === status ? state : { chatStatus: status }
+        ),
+      setSandboxId: (sandboxId) =>
+        set(() => ({
+          sandboxId,
+          status: 'running',
+          commands: [],
+          paths: [],
+          url: undefined,
+          savedProjectId: undefined,
+          generatedFiles: new Set<string>(),
+        })),
+      setStatus: (status) => set(() => ({ status })),
+      setUrl: (url, urlUUID) => set(() => ({ url, urlUUID })),
+      upsertCommand: (cmd) => {
+        set((state) => {
+          const existingIdx = state.commands.findIndex((c) => c.cmdId === cmd.cmdId)
+          const idx = existingIdx !== -1 ? existingIdx : state.commands.length
+          const prev = state.commands[idx] ?? { startedAt: Date.now(), logs: [] }
+          const cmds = [...state.commands]
+          cmds[idx] = { ...prev, ...cmd }
+          return { commands: cmds }
+        })
+      },
+    }),
+    {
+      name: 'sandbox-state',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) =>
+        Object.fromEntries(
+          PERSISTED_SANDBOX_KEYS.map((k) => [k, state[k]])
+        ) as Pick<SandboxStore, (typeof PERSISTED_SANDBOX_KEYS)[number]>,
+    }
+  )
+)
 
 interface FileExplorerStore {
   paths: string[]

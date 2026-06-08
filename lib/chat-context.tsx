@@ -10,8 +10,11 @@ import { useDataStateMapper } from '@/app/state'
 import { mutate } from 'swr'
 import { toast } from 'sonner'
 
+export const CHAT_MESSAGES_KEY = 'chat-messages'
+
 interface ChatContextValue {
   chat: Chat<ChatUIMessage>
+  hasRestoredSession: boolean
 }
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined)
@@ -21,9 +24,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const mapDataToStateRef = useRef(mapDataToState)
   mapDataToStateRef.current = mapDataToState
 
-  const chat = useMemo(
-    () =>
-      new Chat<ChatUIMessage>({
+  const { chat, hasRestoredSession } = useMemo(() => {
+    let initialMessages: ChatUIMessage[] | undefined
+    let restored = false
+    try {
+      const raw = localStorage.getItem(CHAT_MESSAGES_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatUIMessage[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          initialMessages = parsed
+          restored = true
+        }
+      }
+    } catch {
+      // Corrupted storage — start fresh
+    }
+
+    return {
+      chat: new Chat<ChatUIMessage>({
+        messages: initialMessages,
         onToolCall: () => mutate('/api/auth/info'),
         onData: (data: DataUIPart<DataPart>) => mapDataToStateRef.current(data),
         onError: (error) => {
@@ -31,11 +50,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           console.error('Error sending message:', error)
         },
       }),
-    []
-  )
+      hasRestoredSession: restored,
+    }
+  }, [])
 
   return (
-    <ChatContext.Provider value={{ chat }}>{children}</ChatContext.Provider>
+    <ChatContext.Provider value={{ chat, hasRestoredSession }}>
+      {children}
+    </ChatContext.Provider>
   )
 }
 
