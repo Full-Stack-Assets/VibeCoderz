@@ -4,12 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const db = getDb()
     const project = await db.query.projects.findFirst({
-      where: eq(schema.projects.id, params.id),
+      where: eq(schema.projects.id, id),
       with: {
         projectFiles: true,
       },
@@ -31,8 +32,9 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const body = await req.json()
     const { name, description, code, status } = body
@@ -47,7 +49,7 @@ export async function PUT(
         status,
         updatedAt: new Date().toISOString(),
       })
-      .where(eq(schema.projects.id, params.id))
+      .where(eq(schema.projects.id, id))
       .returning()
 
     return NextResponse.json(result[0])
@@ -62,11 +64,12 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const db = getDb()
-    await db.delete(schema.projects).where(eq(schema.projects.id, params.id))
+    await db.delete(schema.projects).where(eq(schema.projects.id, id))
 
     return NextResponse.json({ success: true })
   } catch (error) {
