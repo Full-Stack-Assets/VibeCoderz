@@ -4,7 +4,7 @@ import type { JSONValue } from 'ai'
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 
-const gateway = createGatewayProvider({
+export const gateway = createGatewayProvider({
   baseURL: process.env.AI_GATEWAY_BASE_URL,
   headers: {
     'http-referer': 'https://oss-vibe-coding-platform.vercel.app/',

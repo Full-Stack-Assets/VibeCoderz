@@ -16,6 +16,7 @@ import { getDb, schema } from '@/db/client'
 import { eq } from 'drizzle-orm'
 import { BILLING_ENABLED, creditsForUsage } from '@/lib/billing'
 import { deductCredits } from '@/lib/credits'
+import { runConductor } from '@/ai/conductor'
 import prompt from './prompt.md'
 
 interface BodyData {
@@ -77,6 +78,27 @@ export async function POST(req: Request) {
     stream: createUIMessageStream({
       originalMessages: messages,
       execute: async ({ writer }) => {
+        // Run the conductor only on the opening user message (no prior
+        // assistant turn yet), so it produces a plan before the worker
+        // starts executing tools.
+        const userMessages = messages.filter((m) => m.role === 'user')
+        if (userMessages.length === 1) {
+          const firstUserText = userMessages[0].parts
+            .filter((p) => p.type === 'text')
+            .map((p) => (p as { type: 'text'; text: string }).text)
+            .join(' ')
+
+          if (firstUserText.trim()) {
+            const plan = await runConductor(firstUserText)
+            if (plan) {
+              writer.write({
+                type: 'data-conductor-plan',
+                data: plan,
+              })
+            }
+          }
+        }
+
         const result = streamText({
           ...getModelOptions(modelId, { reasoningEffort }),
           system: prompt,
