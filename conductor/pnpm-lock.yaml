@@ -13,6 +13,9 @@ importers:
       '@conductor/agent-memory':
         specifier: workspace:*
         version: link:../../packages/agent-memory
+      '@conductor/agent-tools':
+        specifier: workspace:*
+        version: link:../../packages/agent-tools
       '@conductor/coo-engine':
         specifier: workspace:*
         version: link:../../packages/coo-engine
@@ -40,6 +43,8 @@ importers:
         version: 5.9.3
 
   packages/agent-memory: {}
+
+  packages/agent-tools: {}
 
   packages/coo-engine: {}
 

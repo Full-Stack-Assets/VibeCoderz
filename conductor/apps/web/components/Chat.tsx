@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
+import { Sandbox } from './Sandbox'
 import type { ChatResponse, Msg, RouteDecision } from '@/lib/types'
 
 const SUGGESTIONS = [
@@ -40,6 +41,7 @@ export function Chat() {
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
+  const convIdRef = useRef<string | undefined>(undefined)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
@@ -79,10 +81,12 @@ export function Chat() {
           body: JSON.stringify({
             messages: history.map((m) => ({ role: m.role, content: m.content })),
             spentUSD: spent,
+            conversationId: convIdRef.current,
           }),
         })
-        const data = (await res.json()) as ChatResponse & { error?: string }
+        const data = (await res.json()) as ChatResponse & { error?: string; conversationId?: string }
         if (data.error) throw new Error(data.error)
+        if (data.conversationId) convIdRef.current = data.conversationId
 
         setMessages((prev) =>
           prev.map((m) =>
@@ -140,6 +144,7 @@ export function Chat() {
     setDecision(null)
     setAudit([])
     setSpent(0)
+    convIdRef.current = undefined
   }
 
   const empty = messages.length === 0
@@ -234,6 +239,7 @@ export function Chat() {
 
         <aside className={`panel ${panelOpen ? 'show' : ''}`}>
           <OrchestrationPanel decision={decision} audit={audit} />
+          <Sandbox />
         </aside>
         {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
       </div>

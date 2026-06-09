@@ -471,6 +471,31 @@ body {
 
 .empty-panel { color: var(--muted); font-size: 13.5px; text-align: center; padding: 40px 10px; }
 
+/* ---- Sandbox runner ------------------------------------------------------ */
+.sandbox-row { display: flex; align-items: center; gap: 8px; }
+.sandbox-prompt { color: var(--coral); font-family: var(--font-mono); font-weight: 600; }
+.sandbox-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--surface-sunk);
+  color: var(--text); border-radius: var(--radius-xs); padding: 7px 10px;
+  font-family: var(--font-mono); font-size: 12.5px; outline: none;
+}
+.sandbox-input:focus { border-color: var(--coral); }
+.sandbox-run {
+  border: none; background: var(--coral); color: #fff; border-radius: var(--radius-xs);
+  padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.sandbox-run:hover { background: var(--coral-press); }
+.sandbox-run:disabled { opacity: 0.5; cursor: default; }
+.sandbox-out {
+  margin: 10px 0 0; padding: 10px 12px; background: var(--surface-sunk);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap;
+  word-break: break-word; max-height: 200px; overflow: auto; color: var(--text-soft);
+}
+.sandbox-out.err { color: var(--coral-press); }
+.sandbox-hint { margin-top: 8px; font-size: 11px; color: var(--faint); }
+.sandbox-hint code { font-size: 10.5px; background: var(--surface-sunk); padding: 1px 5px; border-radius: 5px; }
+
 /* scrollbars */
 .conversation::-webkit-scrollbar, .panel::-webkit-scrollbar { width: 10px; }
 .conversation::-webkit-scrollbar-thumb, .panel::-webkit-scrollbar-thumb {
