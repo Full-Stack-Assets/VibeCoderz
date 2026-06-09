@@ -1,0 +1,16 @@
+{
+  "name": "@conductor/eval",
+  "version": "1.0.0",
+  "description": "Evaluation harness — quantifies the cost/quality tradeoff of COO routing vs baseline strategies over a golden dataset, with a swappable quality oracle (synthetic or LLM-judge).",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "bin": { "conductor-eval": "./bin/eval.js" },
+  "scripts": {
+    "test": "node --test",
+    "eval": "node bin/eval.js"
+  },
+  "keywords": ["evaluation", "benchmark", "llm", "routing", "cost-optimization"],
+  "license": "MIT",
+  "engines": { "node": ">=18.0.0" }
+}

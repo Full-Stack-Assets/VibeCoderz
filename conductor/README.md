@@ -128,8 +128,8 @@ cp .env.example apps/web/.env.local
 ## Test it
 
 The orchestration core, memory layer, tool sandbox, agentic loop, multimodal
-routing, and capability tools are unit-tested with the Node test runner (45
-tests, no install required):
+routing, capability tools, and the evaluation harness are unit-tested with the
+Node test runner (54 tests, no install required):
 
 ```bash
 pnpm test
@@ -137,7 +137,43 @@ pnpm test
 node --test packages/coo-engine     # routing, fitness, budget gates
 node --test packages/agent-memory   # store factory + context window
 node --test packages/agent-tools    # sandbox executor + registry
+node --test packages/eval           # cost/quality benchmark + claims
 ```
+
+## Evidence: the cost/quality benchmark
+
+Routing is only worth anything if it saves money *without* losing quality. That
+claim is **measured, not asserted** — `@conductor/eval` scores the **shipping
+`routeTurn`** against pin-one-model baselines over an 18-task golden set
+(coding, reasoning, writing, analysis, research, data, vision):
+
+```bash
+pnpm eval            # print the Markdown report
+pnpm eval:write      # regenerate BENCHMARKS.md
+pnpm eval -- --live  # use a real LLM-as-judge oracle (needs a gateway/provider key)
+```
+
+Current result (synthetic oracle — see `BENCHMARKS.md`):
+
+| Strategy | Avg quality | $ / task |
+| --- | ---: | ---: |
+| **COO (this router)** | **98.1%** | **$0.0083** |
+| Always-Premium (Opus) | 98.7% | $0.0257 |
+| Always-Cheapest (Grok) | 86.9% | $0.0021 |
+
+> **COO is ~68% cheaper than always-using-the-premium model while retaining
+> ~99% of its quality, and delivers ~13% higher quality than always-using the
+> cheapest.** Those two inequalities are locked in as regression tests.
+
+The crux is the **quality oracle**, which is deliberately explicit and swappable
+(`packages/eval/src/oracle.js`). The default is a transparent *synthetic prior*
+(capability vs task difficulty, specialty match, vision capability) so the
+benchmark runs deterministically in CI with zero keys — it is a model of
+competence, **not** a live measurement. The `--live` oracle replaces the prior
+with real model calls scored by an LLM judge; swapping it changes *only* the
+oracle, not the strategies, dataset, or report. That separation is the point:
+it's the seam that turns "transparent assumptions" into "evidence" the day you
+add a key.
 
 ## Deploy to Vercel
 
