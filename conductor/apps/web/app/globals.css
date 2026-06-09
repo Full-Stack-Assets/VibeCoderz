@@ -540,6 +540,48 @@ body {
 .assistant-body a { color: var(--coral-press); text-decoration: underline; text-underline-offset: 2px; }
 .assistant-body a:hover { color: var(--coral); }
 
+/* ---- Research citations (web_search) ------------------------------------- */
+.citations { padding: 10px 12px; }
+.citations-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.citation-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.citation-link {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); text-decoration: none; color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint); }
+.citation-idx {
+  flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px;
+  display: grid; place-items: center; border-radius: 999px;
+  background: var(--coral-tint); color: var(--coral-press);
+  font-size: 11px; font-weight: 700;
+}
+.citation-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.citation-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.citation-host { font-size: 11.5px; color: var(--coral-press); }
+.citation-snippet {
+  font-size: 12.5px; color: var(--muted); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ---- Data chart (analyze_data) ------------------------------------------- */
+.datachart { padding: 10px 12px; }
+.datachart-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.datachart-rows { display: flex; flex-direction: column; gap: 10px; }
+.datachart-row { display: flex; flex-direction: column; gap: 3px; }
+.dc-top { display: flex; justify-content: space-between; font-size: 12.5px; }
+.dc-name { font-weight: 600; color: var(--text); }
+.dc-mean { color: var(--coral-press); font-family: var(--font-mono); font-size: 11.5px; }
+.dc-track { height: 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
+.dc-fill { height: 100%; background: var(--coral); border-radius: 999px; }
+.dc-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); font-family: var(--font-mono); }
+.dc-textcols { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dc-chip {
+  font-size: 11.5px; color: var(--text-soft); padding: 2px 9px;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+}
+
 /* ---- Orchestration panel (the differentiator) ---------------------------- */
 .panel {
   border-left: 1px solid var(--border);
