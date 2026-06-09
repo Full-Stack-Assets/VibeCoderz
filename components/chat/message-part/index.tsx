@@ -9,6 +9,7 @@ import { RunCommand } from './run-command'
 import { ReportErrors } from './report-errors'
 import { Reasoning } from './reasoning'
 import { Text } from './text'
+import { ConductorPlan } from './conductor-plan'
 import { memo } from 'react'
 
 interface Props {
@@ -20,7 +21,9 @@ export const MessagePart = memo(function MessagePart({
   part,
   partIndex,
 }: Props) {
-  if (part.type === 'data-generating-files') {
+  if (part.type === 'data-conductor-plan') {
+    return <ConductorPlan data={part.data} />
+  } else if (part.type === 'data-generating-files') {
     return <GenerateFiles message={part.data} />
   } else if (part.type === 'data-create-sandbox') {
     return <CreateSandbox message={part.data} />
