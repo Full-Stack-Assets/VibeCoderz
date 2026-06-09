@@ -11,6 +11,11 @@ import { NextResponse } from 'next/server'
 import { getModelOptions } from '@/ai/gateway'
 import { checkBotId } from 'botid/server'
 import { tools } from '@/ai/tools'
+import { getSessionUser } from '@/lib/auth'
+import { getDb, schema } from '@/db/client'
+import { eq } from 'drizzle-orm'
+import { creditsForUsage } from '@/lib/billing'
+import { deductCredits } from '@/lib/credits'
 import prompt from './prompt.md'
 
 interface BodyData {
@@ -33,6 +38,36 @@ export async function POST(req: Request) {
       { status: 400 }
     )
   }
+
+  // Require an authenticated account with available credits.
+  const session = await getSessionUser()
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Please sign in to start building.' },
+      { status: 401 }
+    )
+  }
+
+  const db = await getDb()
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.id, session.sub),
+  })
+
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Please sign in to start building.' },
+      { status: 401 }
+    )
+  }
+
+  if (user.creditsBalance <= 0) {
+    return NextResponse.json(
+      { error: "You're out of credits. Add more to keep building." },
+      { status: 402 }
+    )
+  }
+
+  const userId = user.id
 
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
@@ -64,6 +99,18 @@ export async function POST(req: Request) {
           ),
           stopWhen: stepCountIs(20),
           tools: tools({ modelId, writer }),
+          onFinish: async ({ totalUsage }) => {
+            try {
+              const credits = creditsForUsage(modelId, {
+                inputTokens: totalUsage.inputTokens,
+                outputTokens: totalUsage.outputTokens,
+                cachedInputTokens: totalUsage.cachedInputTokens,
+              })
+              await deductCredits(userId, credits, 'generation')
+            } catch (error) {
+              console.error('Failed to deduct credits:', error)
+            }
+          },
           onError: (error) => {
             console.error('Error communicating with AI')
             console.error(JSON.stringify(error, null, 2))
