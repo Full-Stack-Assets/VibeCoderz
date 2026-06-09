@@ -1,13 +1,11 @@
 import type { NextConfig } from 'next'
-import path from 'node:path'
 
 const nextConfig: NextConfig = {
-  // Conductor is a nested pnpm workspace; pin the build root so Turbopack doesn't
-  // pick up a parent lockfile.
-  turbopack: {
-    root: path.resolve(import.meta.dirname, '..', '..'),
-  },
   // Workspace packages are plain ESM; transpile them so Next bundles cleanly.
+  // We build with webpack (`next build --webpack`) rather than Turbopack: on
+  // Vercel the build is rooted at apps/web, and Turbopack refuses to compile the
+  // workspace packages that live above that root. Webpack + transpilePackages
+  // bundles them regardless of root.
   transpilePackages: ['@conductor/coo-engine', '@conductor/agent-memory', '@conductor/agent-tools'],
 }
 
