@@ -24,9 +24,10 @@ const lastUserText = (messages = []) => {
  * @param {(steps:any[]) => Promise<{type:'tool'|'final', tool?:string, args?:object, text?:string}>} opts.planner
  * @param {import('./index.js').ToolRegistry} opts.registry
  * @param {number} [opts.maxSteps=6]
+ * @param {(step:{tool,args,result}) => void} [opts.onStep] called as each tool step completes
  * @returns {Promise<{text:string, steps:Array<{tool,args,result}>}>}
  */
-export async function runAgenticTurn({ planner, registry, maxSteps = 6 }) {
+export async function runAgenticTurn({ planner, registry, maxSteps = 6, onStep }) {
   const steps = [];
   for (let i = 0; i < maxSteps; i++) {
     const action = await planner(steps);
@@ -34,7 +35,15 @@ export async function runAgenticTurn({ planner, registry, maxSteps = 6 }) {
       return { text: action?.text ?? '', steps };
     }
     const result = await registry.run(action.tool, action.args || {});
-    steps.push({ tool: action.tool, args: action.args || {}, result });
+    const step = { tool: action.tool, args: action.args || {}, result };
+    steps.push(step);
+    if (onStep) {
+      try {
+        onStep(step);
+      } catch {
+        /* observer errors must not break the loop */
+      }
+    }
   }
   return {
     text: `Reached the ${maxSteps}-step tool limit. Here is what was done so far.`,

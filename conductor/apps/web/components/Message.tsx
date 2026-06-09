@@ -1,7 +1,29 @@
 'use client'
 
+import { useState } from 'react'
 import { Burst } from './Burst'
 import type { Msg } from '@/lib/types'
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      className="copy-btn"
+      title="Copy"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setDone(true)
+          setTimeout(() => setDone(false), 1200)
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+    >
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -101,6 +123,7 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             {msg.simulated && <span className="tag sim">simulated</span>}
             {msg.decision.fallback && <span className="tag">fallback</span>}
             {msg.decision.overridden && <span className="tag">override</span>}
+            {msg.content && <CopyButton text={msg.content} />}
           </div>
         )}
       </div>

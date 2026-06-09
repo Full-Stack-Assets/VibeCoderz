@@ -142,6 +142,16 @@ Edit `packages/coo-engine/src/catalog.js` to change pricing, capability, or add
 models. Pricing is USD per 1M tokens — verify against current provider rates
 before relying on metered cost for billing.
 
+## Product UX
+
+A complete chat product, not just an API: responses **stream** token-by-token
+over SSE (with the routing decision and each agentic tool step arriving live),
+a **Stop** button aborts mid-stream, assistant messages have **Copy**, and a
+**conversation sidebar** keeps your full history in `localStorage` so chats
+survive reloads with zero backend — new / switch / delete, all client-side.
+(The server additionally keeps a durable audit log via the memory store /
+Postgres.)
+
 ## Design
 
 The UI mirrors Anthropic / Claude's design language: ivory `#faf9f5`, ink
