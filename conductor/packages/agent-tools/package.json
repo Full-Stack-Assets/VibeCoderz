@@ -1,0 +1,11 @@
+{
+  "name": "@conductor/agent-tools",
+  "version": "1.0.0",
+  "description": "Sandboxed tool execution for the agent runtime — pluggable executor (simulated / local / remote) behind a provider-ready tool registry.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "scripts": { "test": "node --test" },
+  "license": "MIT",
+  "engines": { "node": ">=18.0.0" }
+}

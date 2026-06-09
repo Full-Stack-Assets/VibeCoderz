@@ -8,6 +8,20 @@
       "when": 1780951016008,
       "tag": "0000_natural_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780960299907,
+      "tag": "0001_harsh_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780965027015,
+      "tag": "0002_sleepy_kree",
+      "breakpoints": true
     }
   ]
 }

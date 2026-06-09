@@ -3,25 +3,26 @@
 @source "../node_modules/streamdown/dist/*.js";
 
 :root {
-  --background: rgb(255, 255, 255);
-  --foreground: rgb(10, 10, 10);
-  --card: rgb(255, 255, 255);
-  --card-foreground: rgb(10, 10, 10);
-  --popover: rgb(255, 255, 255);
-  --popover-foreground: rgb(10, 10, 10);
-  --primary: rgb(41, 41, 41);
-  --primary-foreground: rgb(250, 250, 250);
-  --secondary: rgb(250, 250, 250);
-  --secondary-foreground: rgb(90, 90, 90);
-  --muted: rgb(240, 240, 240);
-  --muted-foreground: rgb(113, 113, 113);
-  --accent: rgb(245, 245, 245);
-  --accent-foreground: oklch(57.61% 0.2508 258.23);
-  --destructive: rgb(231, 0, 11);
-  --destructive-foreground: rgb(245, 245, 245);
-  --border: rgb(229, 229, 229);
-  --input: rgb(229, 229, 229);
-  --ring: rgb(161, 161, 161);
+  /* Warm, Claude-inspired light palette (paper background + clay accent) */
+  --background: rgb(243, 240, 233);
+  --foreground: rgb(38, 34, 30);
+  --card: rgb(250, 248, 243);
+  --card-foreground: rgb(38, 34, 30);
+  --popover: rgb(250, 248, 243);
+  --popover-foreground: rgb(38, 34, 30);
+  --primary: rgb(193, 101, 70);
+  --primary-foreground: rgb(250, 248, 243);
+  --secondary: rgb(235, 231, 222);
+  --secondary-foreground: rgb(60, 54, 48);
+  --muted: rgb(235, 231, 222);
+  --muted-foreground: rgb(124, 116, 104);
+  --accent: rgb(235, 231, 222);
+  --accent-foreground: rgb(193, 101, 70);
+  --destructive: rgb(200, 53, 45);
+  --destructive-foreground: rgb(250, 248, 243);
+  --border: rgb(225, 219, 208);
+  --input: rgb(225, 219, 208);
+  --ring: rgb(193, 101, 70);
   --chart-1: rgb(115, 115, 115);
   --chart-2: rgb(115, 115, 115);
   --chart-3: rgb(115, 115, 115);
@@ -36,7 +37,7 @@
   --sidebar-border: rgb(229, 229, 229);
   --sidebar-ring: rgb(161, 161, 161);
   --font-sans: Geist, sans-serif;
-  --font-serif: Geist Mono, monospace;
+  --font-serif: Georgia, Cambria, 'Times New Roman', serif;
   --font-mono: Geist Mono, monospace;
   --radius: 0.75rem;
   --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);
@@ -60,25 +61,26 @@
 }
 
 .dark {
-  --background: rgb(10, 10, 10);
-  --foreground: rgb(250, 250, 250);
-  --card: rgb(25, 25, 25);
-  --card-foreground: rgb(250, 250, 250);
-  --popover: rgb(38, 38, 38);
-  --popover-foreground: rgb(250, 250, 250);
-  --primary: rgb(115, 115, 115);
-  --primary-foreground: rgb(250, 250, 250);
-  --secondary: rgb(38, 38, 38);
-  --secondary-foreground: rgb(250, 250, 250);
-  --muted: rgb(38, 38, 38);
-  --muted-foreground: rgb(161, 161, 161);
-  --accent: rgb(64, 64, 64);
-  --accent-foreground: rgb(250, 250, 250);
-  --destructive: rgb(255, 100, 103);
-  --destructive-foreground: rgb(38, 38, 38);
-  --border: rgb(56, 56, 56);
-  --input: rgb(82, 82, 82);
-  --ring: rgb(115, 115, 115);
+  /* Warm, Claude-inspired dark palette */
+  --background: rgb(30, 27, 24);
+  --foreground: rgb(237, 232, 224);
+  --card: rgb(40, 36, 32);
+  --card-foreground: rgb(237, 232, 224);
+  --popover: rgb(40, 36, 32);
+  --popover-foreground: rgb(237, 232, 224);
+  --primary: rgb(209, 122, 90);
+  --primary-foreground: rgb(28, 25, 22);
+  --secondary: rgb(48, 43, 38);
+  --secondary-foreground: rgb(224, 218, 209);
+  --muted: rgb(48, 43, 38);
+  --muted-foreground: rgb(166, 156, 144);
+  --accent: rgb(58, 52, 46);
+  --accent-foreground: rgb(209, 122, 90);
+  --destructive: rgb(232, 90, 82);
+  --destructive-foreground: rgb(28, 25, 22);
+  --border: rgb(58, 52, 46);
+  --input: rgb(70, 63, 56);
+  --ring: rgb(209, 122, 90);
   --chart-1: rgb(115, 115, 115);
   --chart-2: rgb(115, 115, 115);
   --chart-3: rgb(115, 115, 115);
@@ -93,7 +95,7 @@
   --sidebar-border: rgb(255, 255, 255);
   --sidebar-ring: rgb(82, 82, 82);
   --font-sans: Geist, sans-serif;
-  --font-serif: Geist Mono, monospace;
+  --font-serif: Georgia, Cambria, 'Times New Roman', serif;
   --font-mono: Geist Mono, monospace;
   --radius: 0.75rem;
   --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);

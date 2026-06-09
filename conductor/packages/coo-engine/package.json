@@ -1,0 +1,18 @@
+{
+  "name": "@conductor/coo-engine",
+  "version": "1.0.0",
+  "description": "Constraint-Optimized Orchestration engine — budget-aware, fitness-scored model routing with audit trails.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core.js",
+    "./catalog": "./src/catalog.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": ["orchestration", "llm", "routing", "constraint-optimization", "multi-agent"],
+  "license": "MIT",
+  "engines": { "node": ">=18.0.0" }
+}

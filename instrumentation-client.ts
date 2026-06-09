@@ -7,6 +7,10 @@ initBotId({
       method: 'POST',
     },
     {
+      path: '/api/auth/login',
+      method: 'POST',
+    },
+    {
       path: '/api/projects',
       method: 'POST',
     },
