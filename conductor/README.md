@@ -87,12 +87,18 @@ pnpm install
 pnpm dev            # → http://localhost:3000
 ```
 
-Add any provider key to switch that provider's models to **live** responses; the
-router automatically uses whichever providers are configured:
+**One gateway key makes every model live** — including Gemini. Because the
+catalog ids are already `provider/model` slugs, a single **Vercel AI Gateway**
+or **OpenRouter** key fronts Claude, GPT, Grok, and Gemini over one
+OpenAI-compatible endpoint (used for both completions and agentic tool-calling).
+A gateway takes precedence over per-provider keys.
 
 ```bash
 cp .env.example apps/web/.env.local
-# set ANTHROPIC_API_KEY and/or OPENAI_API_KEY and/or XAI_API_KEY
+# RECOMMENDED — one key, every model:
+#   AI_GATEWAY_API_KEY=…   (Vercel AI Gateway)   or   OPENROUTER_API_KEY=…
+# OR native per-provider:
+#   ANTHROPIC_API_KEY / OPENAI_API_KEY / XAI_API_KEY   (Gemini needs a gateway)
 ```
 
 ## Test it

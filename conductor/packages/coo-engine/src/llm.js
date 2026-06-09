@@ -17,6 +17,38 @@ function hasKey(provider) {
   return false;
 }
 
+/**
+ * Resolve a single OpenAI-compatible GATEWAY that can reach EVERY catalog model
+ * (Anthropic, OpenAI, xAI, Google/Gemini, …) with one key — the catalog ids are
+ * already `provider/model`, exactly the slug format these gateways use.
+ *   - Vercel AI Gateway  (AI_GATEWAY_API_KEY)
+ *   - OpenRouter         (OPENROUTER_API_KEY)
+ * Returns null when no gateway key is set (callers use per-provider native keys
+ * or simulation). A gateway takes precedence over native provider keys.
+ */
+export function gatewayConfig(env = process.env) {
+  if (env.AI_GATEWAY_API_KEY) {
+    return {
+      kind: 'vercel',
+      baseURL: env.AI_GATEWAY_BASE_URL || 'https://ai-gateway.vercel.sh/v1',
+      apiKey: env.AI_GATEWAY_API_KEY,
+      headers: {},
+    };
+  }
+  if (env.OPENROUTER_API_KEY) {
+    return {
+      kind: 'openrouter',
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: env.OPENROUTER_API_KEY,
+      headers: {
+        'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://conductor-xi.vercel.app',
+        'X-Title': 'Conductor',
+      },
+    };
+  }
+  return null;
+}
+
 function meter(model, usage) {
   const p = model?.pricing || { input: 0, output: 0 };
   const input = usage?.input_tokens || 0;
@@ -51,12 +83,14 @@ async function callAnthropic(model, { system, messages, maxTokens }) {
   return { text, usage: { input_tokens: data.usage?.input_tokens || 0, output_tokens: data.usage?.output_tokens || 0 } };
 }
 
-async function callOpenAICompatible(model, { system, messages, maxTokens }, { baseURL, apiKey }) {
+async function callOpenAICompatible(model, { system, messages, maxTokens }, { baseURL, apiKey, headers = {}, modelName }) {
   const res = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...headers },
     body: JSON.stringify({
-      model: wireModelId(model),
+      // Native providers want the bare model id; gateways want the full
+      // `provider/model` catalog id. `modelName` overrides when given.
+      model: modelName || wireModelId(model),
       max_tokens: maxTokens,
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
@@ -86,7 +120,8 @@ export function simulate(model, { messages }) {
     `The COO engine routed this turn to **${model.label}** (${model.type}). ` +
     `In live mode this is where ${model.label}'s real completion would stream in.\n\n` +
     `> Your request: ${ask || '(empty)'}\n\n` +
-    `Set \`${model.provider.toUpperCase()}_API_KEY\` to switch this model to live responses.`;
+    `Set \`AI_GATEWAY_API_KEY\` (or \`OPENROUTER_API_KEY\`) to switch every model — ` +
+    `including this one — to live responses through one gateway.`;
   const usage = { input_tokens: Math.ceil(ask.length / 4) + 40, output_tokens: Math.ceil(text.length / 4) };
   return { text, usage };
 }
@@ -102,6 +137,18 @@ export async function complete(modelId, opts = {}) {
   const model = getModel(modelId);
   if (!model) throw new Error(`unknown model ${modelId}`);
   const { system, messages = [], maxTokens = 1024 } = opts;
+
+  // Gateway path: one key reaches every model (incl. Gemini). Takes precedence.
+  const gw = gatewayConfig();
+  if (gw) {
+    const result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
+      baseURL: gw.baseURL,
+      apiKey: gw.apiKey,
+      headers: gw.headers,
+      modelName: model.id, // gateways use the full provider/model slug
+    });
+    return { ...result, model: model.id, provider: `gateway:${gw.kind}`, costUSD: meter(model, result.usage), simulated: false };
+  }
 
   if (!hasKey(model.provider)) {
     const sim = simulate(model, { messages });
