@@ -10,6 +10,59 @@
 
 import { getModel } from './catalog.js';
 
+/**
+ * MULTIMODAL CONTENT — a message's `content` may be a plain string OR an array
+ * of blocks: `{ type:'text', text }` and `{ type:'image', dataUrl | url |
+ * (mediaType + data) }`. These converters render those blocks into each
+ * provider's native shape so image input works on the gateway, OpenAI-compatible
+ * providers, and Anthropic alike. Strings pass through untouched.
+ */
+function splitImage(b) {
+  if (b.data && b.mediaType) return { mediaType: b.mediaType, data: b.data };
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(b.dataUrl || '');
+  if (m) return { mediaType: m[1], data: m[2] };
+  return { mediaType: 'image/png', data: '' };
+}
+
+export function toAnthropicContent(content) {
+  if (typeof content === 'string' || !Array.isArray(content)) return String(content ?? '');
+  return content.map((b) => {
+    if (b.type === 'image') {
+      if (b.url) return { type: 'image', source: { type: 'url', url: b.url } };
+      const { mediaType, data } = splitImage(b);
+      return { type: 'image', source: { type: 'base64', media_type: mediaType, data } };
+    }
+    return { type: 'text', text: String(b.text ?? '') };
+  });
+}
+
+export function toOpenAIContent(content) {
+  if (typeof content === 'string' || !Array.isArray(content)) return String(content ?? '');
+  return content.map((b) => {
+    if (b.type === 'image') {
+      const url = b.url || b.dataUrl || `data:${b.mediaType};base64,${b.data}`;
+      return { type: 'image_url', image_url: { url } };
+    }
+    return { type: 'text', text: String(b.text ?? '') };
+  });
+}
+
+/** True if any message carries an image block — used to gate vision routing. */
+export function messagesHaveImages(messages = []) {
+  return messages.some(
+    (m) => Array.isArray(m.content) && m.content.some((b) => b && b.type === 'image')
+  );
+}
+
+/** Flatten a message's content to plain text (drops images) for simulation/meta. */
+export function contentToText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.filter((b) => b.type !== 'image').map((b) => String(b.text ?? '')).join(' ').trim();
+  }
+  return String(content ?? '');
+}
+
 function hasKey(provider) {
   if (provider === 'anthropic') return !!process.env.ANTHROPIC_API_KEY;
   if (provider === 'openai') return !!process.env.OPENAI_API_KEY;
@@ -74,7 +127,7 @@ async function callAnthropic(model, { system, messages, maxTokens }) {
       model: process.env.ANTHROPIC_MODEL || wireModelId(model),
       max_tokens: maxTokens,
       system,
-      messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content) })),
+      messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toAnthropicContent(m.content) })),
     }),
   });
   if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
@@ -94,7 +147,7 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
       max_tokens: maxTokens,
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
-        ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content) })),
+        ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
       ],
     }),
   });
@@ -113,12 +166,19 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
  */
 export function simulate(model, { messages }) {
   const last = [...messages].reverse().find((m) => m.role === 'user');
-  const ask = (last?.content || '').slice(0, 280);
+  const ask = contentToText(last?.content).slice(0, 280);
+  const imageCount = Array.isArray(last?.content)
+    ? last.content.filter((b) => b && b.type === 'image').length
+    : 0;
+  const sawImages = imageCount
+    ? `\n\nIt also received **${imageCount} image${imageCount > 1 ? 's' : ''}** — in live mode ` +
+      `${model.label} would describe and reason over them.`
+    : '';
   const text =
     `**[simulation · ${model.label}]** — no provider key configured, so Conductor ` +
     `is answering in simulation mode.\n\n` +
     `The COO engine routed this turn to **${model.label}** (${model.type}). ` +
-    `In live mode this is where ${model.label}'s real completion would stream in.\n\n` +
+    `In live mode this is where ${model.label}'s real completion would stream in.${sawImages}\n\n` +
     `> Your request: ${ask || '(empty)'}\n\n` +
     `Set \`AI_GATEWAY_API_KEY\` (or \`OPENROUTER_API_KEY\`) to switch every model — ` +
     `including this one — to live responses through one gateway.`;

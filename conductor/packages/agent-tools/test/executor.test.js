@@ -5,7 +5,13 @@ import path from 'node:path';
 import { ToolRegistry, SimulatedExecutor, LocalSandboxExecutor, runTool, TOOL_NAMES } from '../src/index.js';
 
 test('exposes the expected tool surface', () => {
-  assert.deepEqual(TOOL_NAMES.sort(), ['list_files', 'read_file', 'run_command', 'write_file'].sort());
+  assert.deepEqual(
+    [...TOOL_NAMES].sort(),
+    [
+      'analyze_data', 'calculator', 'current_time', 'fetch_url', 'list_files',
+      'read_file', 'run_command', 'web_search', 'write_file',
+    ].sort()
+  );
 });
 
 test('simulated executor writes and reads without side effects', async () => {

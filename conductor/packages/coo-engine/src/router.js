@@ -12,12 +12,13 @@
 import { findBestAgentForTask } from './core.js';
 import { classifyTurn } from './classify.js';
 import { MODEL_CATALOG, getModel, modelsAsAgents } from './catalog.js';
+import { contentToText } from './llm.js';
 
 const lastUserText = (messages = []) => {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === 'user') return String(messages[i].content ?? '');
+    if (messages[i]?.role === 'user') return contentToText(messages[i].content);
   }
-  return String(messages[messages.length - 1]?.content ?? '');
+  return contentToText(messages[messages.length - 1]?.content);
 };
 
 /**
@@ -40,6 +41,7 @@ export function estimateTurnCostUSD(model, promptChars, maxTokens = 1024) {
  * @param {number} [opts.spentUSD=0]              already-spent in the session
  * @param {number} [opts.qualityFloor]            hard minimum capability (0..1)
  * @param {string} [opts.preferModel]             manual model override (id)
+ * @param {boolean}[opts.hasImages=false]         turn carries images → require a multimodal model
  * @param {boolean}[opts.adaptiveWeighting=true]  shift weights to the binding constraint
  * @returns {Object} decision with chosen model + audit trail
  */
@@ -50,17 +52,19 @@ export function routeTurn(opts = {}) {
     spentUSD = 0,
     qualityFloor,
     preferModel,
+    hasImages = false,
     adaptiveWeighting = true,
   } = opts;
 
   const text = lastUserText(messages);
-  const classification = classifyTurn(text, { qualityFloor });
+  const classification = classifyTurn(text, { qualityFloor, hasImages });
 
   const task = {
     id: 'turn',
     type: classification.type,
     complexity: classification.complexity,
     minQuality: classification.minQuality,
+    requiresVision: classification.requiresVision,
     status: 'queued',
   };
 

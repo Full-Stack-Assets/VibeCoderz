@@ -9,6 +9,9 @@
  *
  * Verify pricing against each provider's current public rates before relying on
  * the metered cost for billing.
+ *
+ * `multimodal` marks models that accept image input — the router uses it as a
+ * capability gate when a turn carries images (see `findBestAgentForTask`).
  */
 
 export const MODEL_CATALOG = [
@@ -20,8 +23,9 @@ export const MODEL_CATALOG = [
     capability: 0.98,
     costPerSec: 0.015,
     maxLatency: 3000,
+    multimodal: true,
     pricing: { input: 5, output: 25 },
-    blurb: 'Deepest reasoning & architecture. Premium tier.',
+    blurb: 'Deepest reasoning & architecture. Premium tier. Sees images.',
   },
   {
     id: 'openai/gpt-5.3-codex',
@@ -31,8 +35,9 @@ export const MODEL_CATALOG = [
     capability: 0.92,
     costPerSec: 0.012,
     maxLatency: 2000,
+    multimodal: true,
     pricing: { input: 2, output: 8 },
-    blurb: 'Code generation & refactors specialist.',
+    blurb: 'Code generation & refactors specialist. Reads screenshots.',
   },
   {
     id: 'anthropic/claude-sonnet-4.6',
@@ -42,8 +47,9 @@ export const MODEL_CATALOG = [
     capability: 0.90,
     costPerSec: 0.008,
     maxLatency: 1500,
+    multimodal: true,
     pricing: { input: 3, output: 15 },
-    blurb: 'Balanced workhorse — fast, capable, cheaper.',
+    blurb: 'Balanced workhorse — fast, capable, cheaper. Sees images.',
   },
   {
     id: 'xai/grok-4.1-fast-reasoning',
@@ -53,8 +59,9 @@ export const MODEL_CATALOG = [
     capability: 0.85,
     costPerSec: 0.006,
     maxLatency: 1200,
+    multimodal: false,
     pricing: { input: 0.5, output: 2 },
-    blurb: 'Fastest & cheapest. Great for analysis at scale.',
+    blurb: 'Fastest & cheapest. Great for data analysis at scale. Text-only.',
   },
   {
     id: 'google/gemini-2.5-pro',
@@ -64,6 +71,7 @@ export const MODEL_CATALOG = [
     capability: 0.93,
     costPerSec: 0.009,
     maxLatency: 1800,
+    multimodal: true,
     pricing: { input: 1.25, output: 10 },
     blurb: 'Google’s multimodal reasoner, huge context — cheaper than Opus.',
   },
@@ -71,6 +79,11 @@ export const MODEL_CATALOG = [
 
 export function getModel(id) {
   return MODEL_CATALOG.find((m) => m.id === id) || null;
+}
+
+/** Catalog models that accept image input. */
+export function visionModels() {
+  return MODEL_CATALOG.filter((m) => m.multimodal);
 }
 
 // Build the COO state's agent pool from the catalog. Each model is an always
@@ -82,6 +95,7 @@ export function modelsAsAgents() {
     type: m.type,
     provider: m.provider,
     capability: m.capability,
+    multimodal: !!m.multimodal,
     costPerSec: m.costPerSec,
     maxLatency: m.maxLatency,
     status: 'idle',

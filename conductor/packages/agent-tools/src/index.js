@@ -9,12 +9,16 @@
  * ported from the Claude Code Assistant's MCP service.
  */
 
-import { TOOLS, TOOL_NAMES, getTool } from './tools.js';
+import { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool } from './tools.js';
 import { getExecutor, SimulatedExecutor, LocalSandboxExecutor } from './executors.js';
 import { runAgenticTurn, makeSimulatedPlanner } from './agent-loop.js';
+import { runPureTool, calculator, currentTime, analyzeData } from './pure-tools.js';
+import { runWebTool, webSearch, fetchUrl, webEnabled } from './web-tools.js';
 
-export { TOOLS, TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor };
+export { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor };
 export { runAgenticTurn, makeSimulatedPlanner };
+export { runPureTool, calculator, currentTime, analyzeData };
+export { runWebTool, webSearch, fetchUrl, webEnabled };
 
 /**
  * Registry of available tools. Seeded with the built-in sandbox tools; MCP

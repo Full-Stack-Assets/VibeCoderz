@@ -114,7 +114,11 @@ export function OrchestrationPanel({
           <span>Turn classification</span>
         </div>
         <div className="chips-row">
+          {decision.classification.domain && (
+            <span className="metachip">domain · {decision.classification.domain}</span>
+          )}
           <span className="metachip">type · {decision.classification.type}</span>
+          {decision.classification.requiresVision && <span className="metachip">vision · required</span>}
           <span className="metachip">
             complexity · {decision.classification.complexity.toFixed(2)}
           </span>

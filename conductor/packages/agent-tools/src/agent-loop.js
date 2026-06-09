@@ -12,9 +12,16 @@
  * zero configuration.
  */
 
+// Flatten a message's content (string or multimodal block array) to plain text.
+const flattenContent = (content) => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter((b) => b.type !== 'image').map((b) => String(b.text ?? '')).join(' ');
+  return String(content ?? '');
+};
+
 const lastUserText = (messages = []) => {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === 'user') return String(messages[i].content ?? '');
+    if (messages[i]?.role === 'user') return flattenContent(messages[i].content);
   }
   return '';
 };
@@ -67,6 +74,22 @@ function buildPlan(text) {
   const wantsFile = /\b(create|write|add|generate|make|implement|build|script|file|component|function|app)\b/.test(t);
   const wantsRun = /\b(run|execute|compile|test|node|npm|print|output)\b/.test(t);
 
+  // Non-coding capabilities (research / utility / data) take precedence when a
+  // clearer intent is present — Conductor is a general agent, not just a coder.
+  const wantsSearch = /\b(search|look up|lookup|find out|latest|news|current|who is|google)\b/.test(t);
+  const calcMatch = text.match(/(?:calculate|compute|what(?:'s| is))?\s*([-+\d().*/%\s]{3,})$/);
+  const wantsTime = /\b(what time|current time|what'?s the date|today'?s date|time is it)\b/.test(t);
+  const dataMatch = text.match(/((?:[^\n,]+,){2,}[^\n,]+(?:\n[^\n,]+)+)/); // looks like CSV
+
+  if (wantsTime) return [{ tool: 'current_time', args: {} }];
+  if (dataMatch) return [{ tool: 'analyze_data', args: { data: dataMatch[1] } }];
+  if (calcMatch && /[-+*/%]/.test(calcMatch[1]) && /\d/.test(calcMatch[1])) {
+    return [{ tool: 'calculator', args: { expression: calcMatch[1].trim() } }];
+  }
+  if (wantsSearch && !wantsFile) {
+    return [{ tool: 'web_search', args: { query: text.slice(0, 120) } }];
+  }
+
   if (wantsList && !wantsFile) return [{ tool: 'list_files', args: {} }];
 
   const plan = [];
@@ -87,7 +110,9 @@ function summarize(task, steps) {
   }
   const lines = steps.map((s) => {
     const out = s.result.ok ? s.result.output : `✗ ${s.result.error}`;
-    const arg = s.tool === 'run_command' ? s.args.command : s.tool === 'write_file' ? s.args.path : s.args.dir || '.';
+    const arg =
+      s.args.command ?? s.args.query ?? s.args.url ?? s.args.expression ?? s.args.path ??
+      s.args.timezone ?? (s.tool === 'analyze_data' ? 'dataset' : s.args.dir || '.');
     return `- \`${s.tool}\` (${arg}) → ${String(out).split('\n')[0].slice(0, 120)}`;
   });
   return (
