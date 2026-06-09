@@ -94,7 +94,14 @@ export const generateFiles = ({ writer, modelId }: Params) =>
       writer.write({
         id: toolCallId,
         type: 'data-generating-files',
-        data: { paths: uploaded.map((file) => file.path), status: 'done' },
+        data: {
+          paths: uploaded.map((file) => file.path),
+          files: uploaded.map((file) => ({
+            path: file.path,
+            lines: file.content.split('\n').length,
+          })),
+          status: 'done',
+        },
       })
 
       return `Successfully generated and uploaded ${
