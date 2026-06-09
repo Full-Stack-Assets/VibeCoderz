@@ -5,6 +5,14 @@
  * See docs/CREDITS_PLAN.md for the full pricing model and margin math.
  */
 
+/**
+ * Master switch for the login + credit/billing system. Disabled by default so
+ * the app is usable without signing in. Set NEXT_PUBLIC_BILLING_ENABLED=true to
+ * turn on auth-gated, metered, paid usage. Readable on both client and server.
+ */
+export const BILLING_ENABLED =
+  process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true'
+
 // Free credits granted when an account is first created.
 export const SIGNUP_CREDIT_GRANT = 50
 

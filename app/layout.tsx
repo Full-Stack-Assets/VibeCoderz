@@ -1,4 +1,5 @@
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
+import { ThemeProvider } from '@/components/theme-provider'
 import { ChatProvider } from '@/lib/chat-context'
 import { CommandLogsStream } from '@/components/commands-logs/commands-logs-stream'
 import { ErrorMonitor } from '@/components/error-monitor/error-monitor'
@@ -37,19 +38,25 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <Suspense fallback={null}>
-          <NuqsAdapter>
-            <ChatProvider>
-              <ErrorMonitor>{children}</ErrorMonitor>
-            </ChatProvider>
-          </NuqsAdapter>
-        </Suspense>
-        <Toaster />
-        <CommandLogsStream />
-        <SandboxState />
-        <Analytics />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <Suspense fallback={null}>
+            <NuqsAdapter>
+              <ChatProvider>
+                <ErrorMonitor>{children}</ErrorMonitor>
+              </ChatProvider>
+            </NuqsAdapter>
+          </Suspense>
+          <Toaster />
+          <CommandLogsStream />
+          <SandboxState />
+        </ThemeProvider>
       </body>
     </html>
   )
