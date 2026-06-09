@@ -17,6 +17,10 @@ import {
   ToggleProjectHistory,
   ProjectHistory,
 } from '@/components/modals/project-history'
+import {
+  ToggleFileExplorer,
+  FileExplorer,
+} from '@/components/modals/file-explorer'
 import { AccountMenu } from '@/components/account/account-menu'
 import { ChatOnboarding } from '@/components/chat/onboarding'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -196,6 +200,7 @@ export function Chat() {
 
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
+          <ToggleFileExplorer />
           <ToggleProjectHistory />
           {BILLING_ENABLED && <AccountMenu />}
         </div>
@@ -228,6 +233,7 @@ export function Chat() {
       )}
 
       <ProjectHistory />
+      <FileExplorer />
     </div>
   )
 }

@@ -22,6 +22,9 @@ export const dataPartSchema = z.object({
   }),
   'generating-files': z.object({
     paths: z.array(z.string()),
+    files: z
+      .array(z.object({ path: z.string(), lines: z.number() }))
+      .optional(),
     status: z.enum(['generating', 'uploading', 'uploaded', 'done', 'error']),
     error: errorSchema.optional(),
   }),
