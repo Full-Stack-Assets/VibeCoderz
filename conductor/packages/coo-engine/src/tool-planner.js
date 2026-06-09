@@ -12,7 +12,7 @@
  */
 
 import { getModel } from './catalog.js';
-import { gatewayConfig } from './llm.js';
+import { gatewayConfig, toAnthropicContent, toOpenAIContent } from './llm.js';
 
 const wireId = (model) => (model.id.includes('/') ? model.id.split('/').slice(1).join('/') : model.id);
 const resultText = (r) => (r?.ok ? String(r.output ?? '') : `ERROR: ${r?.error ?? 'tool failed'}`);
@@ -95,10 +95,10 @@ export function makeAnthropicToolPlanner({ modelId, system, messages, tools, max
     input_schema: t.parameters,
   }));
 
-  // Provider-native running transcript.
+  // Provider-native running transcript (text or multimodal image blocks).
   const convo = messages.map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: String(m.content),
+    content: toAnthropicContent(m.content),
   }));
 
   let queue = []; // pending tool_use blocks from the latest assistant turn
@@ -182,7 +182,7 @@ export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseUR
 
   const convo = [
     ...(system ? [{ role: 'system', content: system }] : []),
-    ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content) })),
+    ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
   ];
 
   let queue = []; // pending tool_calls from the latest assistant turn

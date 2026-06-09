@@ -1,6 +1,6 @@
 # Conductor
 
-**A constraint-optimized agentic coding platform.** Conductor fuses three
+**A constraint-optimized general agentic assistant.** Conductor fuses three
 projects into one product: it routes every chat turn to the *cheapest model that
 is still good enough* using a patented-style Constraint-Optimized Orchestration
 (COO) engine, runs it through a memory-backed agent runtime, and presents it all
@@ -11,6 +11,21 @@ accent, serif display type, soft paper texture.
 > differentiator is that **model selection is an optimization problem solved per
 > turn** — budget-aware, fitness-scored across five constraint dimensions, and
 > **fully auditable**. You can see exactly which model was chosen and why.
+
+## Capabilities
+
+Conductor is a general agent, not just a coding tool. Each turn is classified
+into a **domain** and routed to the best-fit model, and the agent can reach for
+the matching tools:
+
+| Domain | What it does | Tools |
+| --- | --- | --- |
+| **Coding** | Write/run/inspect code in a sandbox | `run_command`, `write_file`, `read_file`, `list_files` |
+| **Research** | Search the live web and read pages, with sources | `web_search`, `fetch_url` |
+| **Data** | Parse CSV/TSV/JSON and compute statistics | `analyze_data` |
+| **Vision** | Reason over attached images & screenshots | (routed to a multimodal model) |
+| **Everyday** | Quick math, current date/time | `calculator`, `current_time` |
+| **Writing / Reasoning** | Drafting, explanation, planning, architecture | (direct completion) |
 
 ## What was combined
 
@@ -56,15 +71,24 @@ documented in `packages/coo-engine/src/core.js`.
   is served by a Postgres/Prisma backend (`PrismaStore`), selected at runtime by
   the store factory. The chat route returns a `conversationId` and replays a
   capped context window.
-- **Tools** (`packages/agent-tools`) — the COO-routed model can drive tools
-  (`run_command`, `write_file`, `read_file`, `list_files`) through a pluggable
-  **Executor**. `SimulatedExecutor` is the zero-config default;
+- **Tools** (`packages/agent-tools`) — the COO-routed model can drive a toolset
+  spanning four groups: **sandbox** (`run_command`, `write_file`, `read_file`,
+  `list_files`), **web** (`web_search`, `fetch_url`), **data** (`analyze_data`),
+  and **utility** (`calculator`, `current_time`) — all through a pluggable
+  **Executor**. Pure-compute tools (calculator, current_time, analyze_data) run
+  for real everywhere. Sandbox tools are simulated by default;
   `CONDUCTOR_SANDBOX=local` switches to a real sandbox (isolated temp dir,
-  path-traversal guards, a command allowlist). The `Executor` interface matches
-  what a Vercel Sandbox / remote backend would implement, and a `ToolRegistry`
-  lets MCP servers contribute tools behind the same dispatch surface. Try it
-  live in the **Sandbox** card in the orchestration panel, or via
-  `POST /api/tools/execute`.
+  path-traversal guards, a command allowlist). Web tools are simulated by default
+  and go live with `CONDUCTOR_WEB=live` (using `TAVILY_API_KEY` when set, else a
+  keyless DuckDuckGo fallback; `fetch_url` strips HTML to text and refuses
+  private/loopback hosts). The `Executor` interface matches what a Vercel Sandbox
+  / remote backend would implement, and a `ToolRegistry` lets MCP servers
+  contribute tools behind the same dispatch surface. Try it live in the
+  **Sandbox** card in the orchestration panel, or via `POST /api/tools/execute`.
+- **Multimodal** — attach images (📎 in the composer) and the turn is gated to a
+  **multimodal** model; images flow through to Anthropic / gateway / OpenAI vision
+  formats, or are described in simulation. Text/data files (CSV, JSON, MD, …) are
+  folded into the prompt for analysis.
 - **Agent mode** (`runAgenticTurn`) — toggle **Agent** in the header and the
   COO-routed model autonomously drives the tools: classify → route → loop
   (call tool → feed result back → repeat) until it answers, with every tool
@@ -103,8 +127,9 @@ cp .env.example apps/web/.env.local
 
 ## Test it
 
-The orchestration core, memory layer, tool sandbox, and agentic loop are
-unit-tested with the Node test runner (26 tests, no install required):
+The orchestration core, memory layer, tool sandbox, agentic loop, multimodal
+routing, and capability tools are unit-tested with the Node test runner (45
+tests, no install required):
 
 ```bash
 pnpm test
@@ -131,12 +156,13 @@ environment variables as needed (it deploys fine with none — simulation mode).
 
 ## The model catalog
 
-| Model | Specialty | Capability | Routed when… |
-| --- | --- | --- | --- |
-| Claude Opus 4.6 | reasoning | 0.98 | deep reasoning / architecture, or a high quality bar |
-| GPT-5.3 Codex | code | 0.92 | code generation & refactors |
-| Claude Sonnet 4.6 | writing | 0.90 | docs, explanations, balanced work |
-| Grok 4.1 Reasoning | analysis | 0.85 | analysis at scale — fastest & cheapest |
+| Model | Specialty | Capability | Vision | Routed when… |
+| --- | --- | --- | --- | --- |
+| Claude Opus 4.6 | reasoning | 0.98 | 👁 | deep reasoning / architecture, or a high quality bar |
+| GPT-5.3 Codex | code | 0.92 | 👁 | code generation & refactors |
+| Claude Sonnet 4.6 | writing | 0.90 | 👁 | docs, explanations, balanced work |
+| Grok 4.1 Reasoning | analysis | 0.85 | — | data analysis at scale — fastest & cheapest |
+| Gemini 2.5 Pro | reasoning | 0.93 | 👁 | multimodal reasoning, huge context — cheaper than Opus |
 
 Edit `packages/coo-engine/src/catalog.js` to change pricing, capability, or add
 models. Pricing is USD per 1M tokens — verify against current provider rates

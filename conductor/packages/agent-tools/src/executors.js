@@ -16,9 +16,20 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runPureTool } from './pure-tools.js';
+import { runWebTool } from './web-tools.js';
 
 const ok = (output, extra = {}) => ({ ok: true, output, ...extra });
 const fail = (error) => ({ ok: false, error: String(error?.message || error) });
+
+// Tools that behave identically regardless of executor: pure compute (always
+// real) and web tools (real when CONDUCTOR_WEB=live, simulated otherwise).
+// Returns a result, or null when `name` isn't a shared tool.
+async function runSharedTool(name, args) {
+  const pure = runPureTool(name, args);
+  if (pure) return pure;
+  return runWebTool(name, args);
+}
 
 export class SimulatedExecutor {
   constructor() {
@@ -27,6 +38,8 @@ export class SimulatedExecutor {
   }
 
   async execute(name, args = {}) {
+    const shared = await runSharedTool(name, args);
+    if (shared) return shared;
     switch (name) {
       case 'run_command':
         return ok(
@@ -74,6 +87,8 @@ export class LocalSandboxExecutor {
   async execute(name, args = {}) {
     await this._ready;
     try {
+      const shared = await runSharedTool(name, args);
+      if (shared) return shared;
       switch (name) {
         case 'write_file': {
           const abs = this._resolve(args.path);

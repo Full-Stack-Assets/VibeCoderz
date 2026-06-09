@@ -15,7 +15,7 @@ export interface RouteDecision {
   overridden: boolean
   optimizerChoice: string | null
   candidates: { id: string; label: string; score: number; typeMatch: boolean }[]
-  classification: { type: string; complexity: number; minQuality: number }
+  classification: { type: string; domain?: string; complexity: number; minQuality: number; requiresVision?: boolean }
   estCostUSD: number
   budget: { budgetUSD: number; spentUSD: number; utilization: number; throttled: boolean }
   reason: string
@@ -36,10 +36,24 @@ export interface ChatResponse {
   steps?: ToolStep[]
 }
 
+/** A user-attached file: an image (sent to vision models) or a text/data file. */
+export interface Attachment {
+  id: string
+  kind: 'image' | 'text'
+  name: string
+  mediaType: string
+  /** data: URL for images (base64). */
+  dataUrl?: string
+  /** Decoded text for text/data files (csv, json, txt, md). */
+  text?: string
+  size: number
+}
+
 export interface Msg {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: Attachment[]
   decision?: RouteDecision
   simulated?: boolean
   costUSD?: number

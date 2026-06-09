@@ -14,14 +14,17 @@ import {
   titleFrom,
   type StoredConversation,
 } from '@/lib/history'
-import type { Msg, RouteDecision, ToolStep } from '@/lib/types'
+import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 
 const SUGGESTIONS = [
-  'Implement a Next.js API route with rate limiting',
-  'Design a fault-tolerant job queue architecture',
-  'Analyze these benchmark numbers and find the regression',
-  'Draft a README for an open-source CLI',
+  'Search the web for the latest on the EU AI Act and cite sources',
+  'Analyze this CSV and find the outliers',
+  'What’s in this screenshot? (attach an image)',
+  'Design a fault-tolerant job queue, then draft the README',
 ]
+
+const TEXT_EXT = /\.(csv|tsv|txt|md|json|log|ya?ml)$/i
+const MAX_ATTACH_BYTES = 5 * 1024 * 1024 // 5 MB per file
 
 function greetingText() {
   const h = new Date().getHours()
@@ -55,9 +58,11 @@ export function Chat() {
   const [agent, setAgent] = useState(false)
   const [conversations, setConversations] = useState<StoredConversation[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef<Msg[]>([])
   messagesRef.current = messages
@@ -86,20 +91,52 @@ export function Chat() {
   const patch = (id: string, fn: (m: Msg) => Msg) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)))
 
+  // Read selected files into attachments: images → data URL, text/data → text.
+  const onFiles = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return
+    const read = (file: File) =>
+      new Promise<Attachment | null>((resolve) => {
+        if (file.size > MAX_ATTACH_BYTES) return resolve(null)
+        const isImage = file.type.startsWith('image/')
+        const isText = file.type.startsWith('text/') || TEXT_EXT.test(file.name) || file.type === 'application/json'
+        if (!isImage && !isText) return resolve(null)
+        const reader = new FileReader()
+        reader.onerror = () => resolve(null)
+        reader.onload = () =>
+          resolve({
+            id: `a${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            kind: isImage ? 'image' : 'text',
+            name: file.name,
+            mediaType: file.type || (isImage ? 'image/png' : 'text/plain'),
+            dataUrl: isImage ? String(reader.result) : undefined,
+            text: isImage ? undefined : String(reader.result),
+            size: file.size,
+          })
+        if (isImage) reader.readAsDataURL(file)
+        else reader.readAsText(file)
+      })
+    const next = (await Promise.all(Array.from(files).map(read))).filter(Boolean) as Attachment[]
+    if (next.length) setAttachments((prev) => [...prev, ...next])
+  }, [])
+
+  const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id))
+
   const send = useCallback(
     async (text: string) => {
       const content = text.trim()
-      if (!content || sending) return
+      const atts = attachments
+      if ((!content && atts.length === 0) || sending) return
       setSending(true)
 
       const cid = currentId ?? convId()
       if (!currentId) setCurrentId(cid)
 
-      const userMsg: Msg = { id: mkId(), role: 'user', content }
+      const userMsg: Msg = { id: mkId(), role: 'user', content, attachments: atts.length ? atts : undefined }
       const pendingId = mkId()
       const history = [...messagesRef.current, userMsg]
       setMessages([...history, { id: pendingId, role: 'assistant', content: '', pending: true }])
       setInput('')
+      setAttachments([])
       requestAnimationFrame(autosize)
 
       const ac = new AbortController()
@@ -111,7 +148,7 @@ export function Chat() {
           headers: { 'content-type': 'application/json' },
           signal: ac.signal,
           body: JSON.stringify({
-            messages: history.map((m) => ({ role: m.role, content: m.content })),
+            messages: history.map((m) => ({ role: m.role, content: m.content, attachments: m.attachments })),
             spentUSD: spent,
             conversationId: cid,
             agentic: agent,
@@ -192,7 +229,7 @@ export function Chat() {
         setTimeout(() => persistLocal(cid, messagesRef.current, 0), 0)
       }
     },
-    [sending, currentId, spent, agent, persistLocal]
+    [sending, currentId, spent, agent, attachments, persistLocal]
   )
 
   // Persist whenever spend updates post-turn (captures final cost).
@@ -296,8 +333,9 @@ export function Chat() {
                 </span>
                 <h1>{greetingText()}</h1>
                 <p>
-                  A constraint-optimized agent. Every turn is routed to the most cost-effective
-                  model that can handle it — and you can see exactly why.
+                  A constraint-optimized general agent — code, web research, data analysis, and
+                  images. Every turn is routed to the most cost-effective model that can handle it,
+                  and you can see exactly why.
                 </p>
                 <div className="suggestions">
                   {SUGGESTIONS.map((s) => (
@@ -317,7 +355,44 @@ export function Chat() {
             )}
 
             <div className="composer-wrap">
+              {attachments.length > 0 && (
+                <div className="attach-row">
+                  {attachments.map((a) => (
+                    <div className={`attach-chip ${a.kind}`} key={a.id}>
+                      {a.kind === 'image' && a.dataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.dataUrl} alt={a.name} />
+                      ) : (
+                        <FileIcon />
+                      )}
+                      <span className="attach-name">{a.name}</span>
+                      <button className="attach-x" onClick={() => removeAttachment(a.id)} aria-label="Remove">
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="composer">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.csv,.tsv,.txt,.md,.json,.log,.yml,.yaml,text/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    void onFiles(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  className="attach-btn"
+                  onClick={() => fileRef.current?.click()}
+                  title="Attach images or data files"
+                  aria-label="Attach files"
+                >
+                  <PaperclipIcon />
+                </button>
                 <textarea
                   ref={taRef}
                   value={input}
@@ -334,14 +409,19 @@ export function Chat() {
                     <StopIcon />
                   </button>
                 ) : (
-                  <button className="send" disabled={!input.trim()} onClick={() => send(input)} aria-label="Send">
+                  <button
+                    className="send"
+                    disabled={!input.trim() && attachments.length === 0}
+                    onClick={() => send(input)}
+                    aria-label="Send"
+                  >
                     <ArrowUpIcon />
                   </button>
                 )}
               </div>
             </div>
             <div className="composer-hint">
-              Routed by the COO engine · streams live · runs in simulation until a gateway key is set
+              Code · web research · data · images — routed by the COO engine, streamed live, simulated until a gateway key is set
             </div>
           </div>
 
@@ -365,6 +445,17 @@ const ArrowUpIcon = () => (
 const StopIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
     <rect x="6" y="6" width="12" height="12" rx="2.5" />
+  </svg>
+)
+const PaperclipIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.44 11.05l-8.49 8.49a5 5 0 0 1-7.07-7.07l8.49-8.49a3 3 0 0 1 4.24 4.24l-8.49 8.49a1 1 0 0 1-1.41-1.41l7.78-7.78" />
+  </svg>
+)
+const FileIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
   </svg>
 )
 const MenuIcon = () => (

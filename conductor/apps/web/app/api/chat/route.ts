@@ -30,18 +30,68 @@ interface MemoryStore {
 }
 
 const SYSTEM =
-  'You are Conductor, an agentic coding assistant. You were routed to this turn ' +
-  'by a constraint-optimized orchestrator that picked the most cost-effective ' +
-  'model capable of handling the request. Be precise, helpful, and concise.'
+  'You are Conductor, a general-purpose agentic assistant — not just a coding tool. ' +
+  'You help with software, web research, data and document analysis, writing, ' +
+  'planning, and reasoning over images. You were routed to this turn by a ' +
+  'constraint-optimized orchestrator that picked the most cost-effective model ' +
+  'capable of the request. You can use tools: run_command/write_file/read_file/' +
+  'list_files (sandbox), web_search/fetch_url (live research — cite sources), ' +
+  'analyze_data (datasets), calculator, and current_time. Prefer a tool over ' +
+  'guessing when a fact is current, computable, or verifiable. Be precise, ' +
+  'helpful, and concise.'
+
+interface Attachment {
+  kind: 'image' | 'text'
+  name: string
+  mediaType: string
+  dataUrl?: string
+  text?: string
+}
+
+interface InMessage {
+  role: 'user' | 'assistant'
+  content: string
+  attachments?: Attachment[]
+}
 
 interface Body {
-  messages: { role: 'user' | 'assistant'; content: string }[]
+  messages: InMessage[]
   spentUSD?: number
   preferModel?: string
   qualityFloor?: number
   conversationId?: string
   agentic?: boolean
 }
+
+// A multimodal content block understood by the engine's provider converters.
+type Block = { type: 'text'; text: string } | { type: 'image'; dataUrl: string }
+interface EngineMessage {
+  role: 'user' | 'assistant'
+  content: string | Block[]
+}
+
+const MAX_TEXT_ATTACH = 20_000
+
+// Build engine messages: fold text-file attachments into the text, and attach
+// images as image blocks so vision-capable models receive them.
+function buildEngineMessages(messages: InMessage[]): EngineMessage[] {
+  return messages.map((m) => {
+    const atts = m.attachments ?? []
+    const images = atts.filter((a) => a.kind === 'image' && a.dataUrl)
+    const files = atts.filter((a) => a.kind === 'text' && a.text)
+    let text = m.content ?? ''
+    for (const f of files) {
+      text += `\n\n[Attached file: ${f.name}]\n${String(f.text).slice(0, MAX_TEXT_ATTACH)}`
+    }
+    if (images.length === 0) return { role: m.role, content: text }
+    const blocks: Block[] = [{ type: 'text', text }]
+    for (const img of images) blocks.push({ type: 'image', dataUrl: img.dataUrl as string })
+    return { role: m.role, content: blocks }
+  })
+}
+
+const hasImageAttachment = (messages: InMessage[]) =>
+  messages.some((m) => (m.attachments ?? []).some((a) => a.kind === 'image' && a.dataUrl))
 
 const lastUser = (messages: { role: string; content: string }[]) =>
   [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
@@ -78,7 +128,7 @@ async function persist(
 
 async function runAgentic(
   modelId: string,
-  messages: { role: string; content: string }[],
+  messages: EngineMessage[],
   onStep: (step: ToolStep) => void
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
   const registry = new ToolRegistry({ executor: getExecutor() })
@@ -109,6 +159,9 @@ export async function POST(req: Request) {
   const messages = Array.isArray(body.messages) ? body.messages : []
   if (messages.length === 0) return new Response('no messages', { status: 400 })
 
+  const engineMessages = buildEngineMessages(messages)
+  const hasImages = hasImageAttachment(messages)
+
   const budgetUSD = Number(process.env.CONDUCTOR_BUDGET_USD || '1.0')
   const spentUSD = Number(body.spentUSD || 0)
   const enc = new TextEncoder()
@@ -121,11 +174,12 @@ export async function POST(req: Request) {
       try {
         // 1) Route the turn and surface the decision immediately.
         const decision = routeTurn({
-          messages,
+          messages: engineMessages,
           budgetUSD,
           spentUSD,
           preferModel: body.preferModel,
           qualityFloor: body.qualityFloor,
+          hasImages,
         }) as RouteDecision
         send('decision', { decision })
 
@@ -151,13 +205,13 @@ export async function POST(req: Request) {
         let costUSD = 0
 
         if (body.agentic) {
-          const out = await runAgentic(decision.model.id, messages, (step) => send('tool', { step }))
+          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }))
           fullText = out.text
           steps = out.steps
           simulated = out.simulated
           costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
         } else {
-          const result = (await complete(decision.model.id, { system: SYSTEM, messages, maxTokens: 1024 })) as {
+          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: 1024 })) as {
             text: string
             costUSD: number
             simulated: boolean
@@ -177,6 +231,7 @@ export async function POST(req: Request) {
         const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
+          domain: decision.classification?.domain,
           costUSD,
           simulated,
           agentic: !!body.agentic,

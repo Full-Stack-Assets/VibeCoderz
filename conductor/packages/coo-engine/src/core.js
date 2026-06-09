@@ -119,6 +119,15 @@ export function findBestAgentForTask(task, state) {
     return { agent: null, score: 0, fallback: false, reason: 'no available models' };
   }
 
+  // Vision gate: an image-bearing turn can only route to a multimodal model.
+  if (task.requiresVision) {
+    const seeing = candidates.filter((a) => a.multimodal);
+    if (seeing.length === 0) {
+      return { agent: null, score: 0, fallback: false, reason: 'no multimodal model available for image input' };
+    }
+    candidates = seeing;
+  }
+
   if (task.minQuality != null) {
     const qualified = candidates.filter((a) => (a.capability != null ? a.capability : 1) >= task.minQuality);
     if (qualified.length === 0) {

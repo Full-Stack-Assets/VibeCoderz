@@ -45,6 +45,11 @@ function renderMarkdown(src: string): string {
         let p = esc(para)
         p = p.replace(/`([^`]+)`/g, '<code>$1</code>')
         p = p.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // [label](https://url) → safe external link
+        p = p.replace(
+          /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+          '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+        )
         if (/^&gt;\s?/.test(p)) {
           html += `<blockquote>${p.replace(/^&gt;\s?/gm, '')}</blockquote>`
         } else {
@@ -59,7 +64,23 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
   if (msg.role === 'user') {
     return (
       <div className="msg user">
-        <div className="bubble">{msg.content}</div>
+        <div className="bubble">
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="msg-attachments">
+              {msg.attachments.map((a) =>
+                a.kind === 'image' && a.dataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={a.id} src={a.dataUrl} alt={a.name} className="msg-img" />
+                ) : (
+                  <span key={a.id} className="msg-file" title={a.name}>
+                    📄 {a.name}
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {msg.content && <span>{msg.content}</span>}
+        </div>
       </div>
     )
   }
@@ -81,12 +102,15 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             {msg.steps && msg.steps.length > 0 && (
               <div className="tool-steps">
                 {msg.steps.map((s, i) => {
-                  const arg =
-                    s.tool === 'run_command'
-                      ? String(s.args.command ?? '')
-                      : s.tool === 'write_file'
-                        ? String(s.args.path ?? '')
-                        : String(s.args.dir ?? '.')
+                  const arg = String(
+                    s.args.command ??
+                      s.args.query ??
+                      s.args.url ??
+                      s.args.expression ??
+                      s.args.path ??
+                      s.args.timezone ??
+                      (s.tool === 'analyze_data' ? 'dataset' : s.args.dir ?? '.')
+                  )
                   return (
                     <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
                       <div className="tool-step-h">
@@ -118,6 +142,9 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             >
               <Burst size={11} /> {msg.decision.model.label}
             </span>
+            {msg.decision.classification?.domain && (
+              <span className="tag domain">{msg.decision.classification.domain}</span>
+            )}
             <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
             <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
             {msg.simulated && <span className="tag sim">simulated</span>}
