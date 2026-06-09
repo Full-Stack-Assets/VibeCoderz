@@ -55,10 +55,36 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             <span />
           </div>
         ) : (
-          <div
-            className="assistant-body"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-          />
+          <>
+            {msg.steps && msg.steps.length > 0 && (
+              <div className="tool-steps">
+                {msg.steps.map((s, i) => {
+                  const arg =
+                    s.tool === 'run_command'
+                      ? String(s.args.command ?? '')
+                      : s.tool === 'write_file'
+                        ? String(s.args.path ?? '')
+                        : String(s.args.dir ?? '.')
+                  return (
+                    <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
+                      <div className="tool-step-h">
+                        <span className="tool-badge">{s.tool}</span>
+                        <code>{arg}</code>
+                        <span className="tool-status">{s.result.ok ? '✓' : '✗'}</span>
+                      </div>
+                      <pre className="tool-step-out">
+                        {s.result.ok ? s.result.output || '(no output)' : s.result.error}
+                      </pre>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <div
+              className="assistant-body"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+            />
+          </>
         )}
         {msg.decision?.model && !msg.pending && (
           <div className="msg-meta">

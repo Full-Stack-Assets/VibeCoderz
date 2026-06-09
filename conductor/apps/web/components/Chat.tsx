@@ -41,6 +41,7 @@ export function Chat() {
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
+  const [agent, setAgent] = useState(false)
   const convIdRef = useRef<string | undefined>(undefined)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -82,6 +83,7 @@ export function Chat() {
             messages: history.map((m) => ({ role: m.role, content: m.content })),
             spentUSD: spent,
             conversationId: convIdRef.current,
+            agentic: agent,
           }),
         })
         const data = (await res.json()) as ChatResponse & { error?: string; conversationId?: string }
@@ -98,6 +100,7 @@ export function Chat() {
                   decision: data.decision,
                   simulated: data.simulated,
                   costUSD: data.costUSD,
+                  steps: data.steps,
                 }
               : m
           )
@@ -129,7 +132,7 @@ export function Chat() {
         setSending(false)
       }
     },
-    [messages, sending, spent]
+    [messages, sending, spent, agent]
   )
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -164,6 +167,13 @@ export function Chat() {
           <span className="dot" />
           {routedLabel ? routedLabel : 'Auto-routed'}
         </div>
+        <button
+          className={`agent-toggle ${agent ? 'on' : ''}`}
+          onClick={() => setAgent((a) => !a)}
+          title="Agent mode: the routed model drives sandbox tools"
+        >
+          <span className="agent-dot" /> Agent
+        </button>
         <button className="iconbtn" onClick={() => setDark((d) => !d)} title="Toggle theme" aria-label="Toggle theme">
           {dark ? <SunIcon /> : <MoonIcon />}
         </button>

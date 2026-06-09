@@ -21,12 +21,19 @@ export interface RouteDecision {
   reason: string
 }
 
+export interface ToolStep {
+  tool: string
+  args: Record<string, unknown>
+  result: { ok: boolean; output?: string; error?: string }
+}
+
 export interface ChatResponse {
   text: string
   decision: RouteDecision
   costUSD: number
   simulated: boolean
   spentUSD: number
+  steps?: ToolStep[]
 }
 
 export interface Msg {
@@ -37,4 +44,5 @@ export interface Msg {
   simulated?: boolean
   costUSD?: number
   pending?: boolean
+  steps?: ToolStep[]
 }
