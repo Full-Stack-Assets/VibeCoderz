@@ -1,11 +1,17 @@
 {
   "name": "@conductor/agent-memory",
-  "version": "1.0.0",
-  "description": "Conversation memory for the agent runtime — in-memory store behind a DB-swappable interface.",
+  "version": "1.1.0",
+  "description": "Conversation memory for the agent runtime — in-memory by default, Postgres (Prisma) when DATABASE_URL is set.",
   "type": "module",
   "main": "./src/index.js",
   "exports": { ".": "./src/index.js" },
-  "scripts": { "test": "node --test" },
+  "scripts": {
+    "test": "node --test",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "comment": "Postgres is opt-in: run `pnpm add @prisma/client prisma` here, then `pnpm prisma:generate` and set DATABASE_URL. PrismaStore lazy-imports @prisma/client, so it stays optional.",
   "license": "MIT",
   "engines": { "node": ">=18.0.0" }
 }

@@ -1,0 +1,71 @@
+name: Deploy Conductor to Vercel
+
+# Deploys conductor/apps/web to Vercel.
+#
+# ZERO-DASHBOARD SETUP: add a single repo secret `VERCEL_TOKEN`
+# (Settings → Secrets and variables → Actions). On the next push to main that
+# touches conductor/** — or a manual run — the Vercel CLI creates a NEW project
+# named "conductor" and deploys it to production. No project needs to exist
+# first. Optionally set VERCEL_ORG_ID / VERCEL_PROJECT_ID to target an existing
+# project/scope instead.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'conductor/**'
+      - '.github/workflows/deploy-conductor-vercel.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: conductor-vercel
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Skip if no token configured
+        id: guard
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN secret not set — skipping deploy (no-op)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        if: steps.guard.outputs.skip == 'false'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        if: steps.guard.outputs.skip == 'false'
+        run: npm install -g vercel@latest
+
+      - name: Deploy (creates the "conductor" project on first run)
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: conductor/apps/web
+        run: |
+          # --yes accepts the inferred project settings; Next.js + the parent
+          # pnpm workspace are auto-detected. Project name defaults to the repo
+          # dir; pass --name on first link if you want to force "conductor".
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN" || true
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"

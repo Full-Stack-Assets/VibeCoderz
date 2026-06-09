@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(import.meta.dirname, '..', '..'),
   },
   // Workspace packages are plain ESM; transpile them so Next bundles cleanly.
-  transpilePackages: ['@conductor/coo-engine', '@conductor/agent-memory'],
+  transpilePackages: ['@conductor/coo-engine', '@conductor/agent-memory', '@conductor/agent-tools'],
 }
 
 export default nextConfig

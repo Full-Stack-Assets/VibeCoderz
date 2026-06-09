@@ -1,0 +1,47 @@
+// Conductor agent-memory — Postgres schema.
+//
+// Mirrors the Claude Code Assistant's persistence model (Conversation / Message
+// / ToolExecution). Enable it by setting DATABASE_URL and running:
+//   pnpm --filter @conductor/agent-memory prisma migrate deploy
+// The store factory falls back to the in-memory store when DATABASE_URL is unset.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String    @default("New conversation")
+  createdAt DateTime  @default(now())
+  messages  Message[]
+  tools     ToolExecution[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  role           String // 'user' | 'assistant' | 'tool'
+  content        String
+  meta           Json? // routing decision, model, cost, etc.
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model ToolExecution {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  name           String
+  input          Json?
+  output         Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}

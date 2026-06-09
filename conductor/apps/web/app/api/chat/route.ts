@@ -1,11 +1,37 @@
 import { NextResponse } from 'next/server'
 import { routeTurn, complete } from '@conductor/coo-engine'
+import { getStore } from '@conductor/agent-memory'
 import type { RouteDecision } from '@/lib/types'
 
 interface CompletionResult {
   text: string
   costUSD: number
   simulated: boolean
+}
+
+interface MemoryStore {
+  createConversation: (title?: string) => Promise<{ id: string }>
+  addMessage: (id: string, role: string, content: string, meta?: unknown) => Promise<unknown>
+}
+
+// Best-effort conversation persistence. Uses Postgres when DATABASE_URL is set,
+// otherwise the in-process store. Never blocks or fails a chat turn.
+async function persist(
+  conversationId: string | undefined,
+  userText: string,
+  assistantText: string,
+  meta: unknown
+): Promise<string | undefined> {
+  try {
+    const store = (await getStore()) as MemoryStore
+    let id = conversationId
+    if (!id) id = (await store.createConversation(userText.slice(0, 60))).id
+    await store.addMessage(id, 'user', userText)
+    await store.addMessage(id, 'assistant', assistantText, meta)
+    return id
+  } catch {
+    return conversationId
+  }
 }
 
 export const runtime = 'nodejs'
@@ -20,7 +46,11 @@ interface Body {
   spentUSD?: number
   preferModel?: string
   qualityFloor?: number
+  conversationId?: string
 }
+
+const lastUser = (messages: { role: string; content: string }[]) =>
+  [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
 
 export async function POST(req: Request) {
   let body: Body
@@ -76,11 +106,20 @@ export async function POST(req: Request) {
     )
   }
 
+  // 4) Persist the turn (durable Postgres when configured, else in-process).
+  const conversationId = await persist(
+    body.conversationId,
+    lastUser(messages),
+    result.text,
+    { model: decision.model.id, score: decision.score, costUSD: result.costUSD, simulated: result.simulated }
+  )
+
   return NextResponse.json({
     text: result.text,
     decision,
     costUSD: result.costUSD,
     simulated: result.simulated,
     spentUSD: Number((spentUSD + result.costUSD).toFixed(6)),
+    conversationId,
   })
 }
