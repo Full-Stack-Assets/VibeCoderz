@@ -47,7 +47,7 @@ export const Message = memo(function Message({ message }: Props) {
         <div className="flex justify-end">
           <div className="max-w-[85%] space-y-1.5 rounded-2xl bg-secondary px-4 py-2.5 text-secondary-foreground">
             {message.parts.map((part, index) => (
-              <MessagePart key={index} part={part} partIndex={index} />
+              <MessagePart key={index} part={part} partIndex={index} allParts={message.parts} />
             ))}
           </div>
         </div>
@@ -64,7 +64,7 @@ export const Message = memo(function Message({ message }: Props) {
           </div>
           <div className="min-w-0 flex-1 space-y-2 pt-0.5">
             {message.parts.map((part, index) => (
-              <MessagePart key={index} part={part} partIndex={index} />
+              <MessagePart key={index} part={part} partIndex={index} allParts={message.parts} />
             ))}
           </div>
         </div>

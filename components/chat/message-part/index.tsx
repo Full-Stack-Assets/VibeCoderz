@@ -12,17 +12,21 @@ import { Text } from './text'
 import { ConductorPlan } from './conductor-plan'
 import { memo } from 'react'
 
+type Part = UIMessage<Metadata, DataPart, ToolSet>['parts'][number]
+
 interface Props {
-  part: UIMessage<Metadata, DataPart, ToolSet>['parts'][number]
+  part: Part
   partIndex: number
+  allParts: Part[]
 }
 
 export const MessagePart = memo(function MessagePart({
   part,
   partIndex,
+  allParts,
 }: Props) {
   if (part.type === 'data-conductor-plan') {
-    return <ConductorPlan data={part.data} />
+    return <ConductorPlan data={part.data} allParts={allParts} />
   } else if (part.type === 'data-generating-files') {
     return <GenerateFiles message={part.data} />
   } else if (part.type === 'data-create-sandbox') {
