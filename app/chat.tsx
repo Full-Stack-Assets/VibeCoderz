@@ -18,8 +18,9 @@ import {
   ProjectHistory,
 } from '@/components/modals/project-history'
 import { AccountMenu } from '@/components/account/account-menu'
+import { ChatOnboarding } from '@/components/chat/onboarding'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { BILLING_ENABLED } from '@/lib/billing'
-import { TEST_PROMPTS } from '@/ai/constants'
 import { useChat } from '@ai-sdk/react'
 import { useLocalStorageValue } from '@/lib/use-local-storage-value'
 import { useCallback, useEffect, useRef } from 'react'
@@ -194,31 +195,21 @@ export function Chat() {
         </Button>
 
         <div className="flex items-center gap-1.5">
+          <ThemeToggle />
           <ToggleProjectHistory />
           {BILLING_ENABLED && <AccountMenu />}
         </div>
       </header>
 
       {messages.length === 0 ? (
-        /* Empty state — centered greeting + composer */
-        <div className="flex flex-1 flex-col items-center justify-center px-4">
-          <div className="w-full max-w-2xl">
+        /* Empty state — greeting, composer, and onboarding (scrollable) */
+        <div className="flex-1 overflow-y-auto px-4">
+          <div className="mx-auto w-full max-w-3xl py-10 sm:py-14">
             <h1 className="mb-6 text-center font-serif text-3xl text-foreground">
               How can I help you today?
             </h1>
-            {composer}
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {TEST_PROMPTS.map((prompt, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => validateAndSubmitMessage(prompt)}
-                  className="rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            <div className="mx-auto max-w-2xl">{composer}</div>
+            <ChatOnboarding onSelect={validateAndSubmitMessage} />
           </div>
         </div>
       ) : (
