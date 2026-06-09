@@ -10,6 +10,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // Conductor is a self-contained monorepo with its own toolchain; don't lint it
+  // as part of the root project.
+  { ignores: ["conductor/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

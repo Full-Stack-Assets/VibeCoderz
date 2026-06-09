@@ -1,0 +1,15 @@
+{
+  "name": "conductor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Conductor — a constraint-optimized agentic coding platform. The COO engine routes every turn to the optimal model; the Claude-iOS-styled web app is the product shell.",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @conductor/web dev",
+    "build": "pnpm --filter @conductor/web build",
+    "start": "pnpm --filter @conductor/web start",
+    "test": "pnpm -r test"
+  },
+  "license": "MIT",
+  "engines": { "node": ">=20.0.0" }
+}

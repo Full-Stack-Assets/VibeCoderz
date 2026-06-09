@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner'
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 const title = 'OSS Vibe Coding Platform'
