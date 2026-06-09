@@ -1,7 +1,7 @@
 'use client'
 
-import { ToggleWelcome } from '@/components/modals/welcome'
 import { ToggleProjectHistory, ProjectHistory } from '@/components/modals/project-history'
+import { AccountMenu } from '@/components/account/account-menu'
 import { VercelDashed } from '@/components/icons/vercel-dashed'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +21,7 @@ export function Header({ className }: Props) {
         </div>
         <div className="flex items-center ml-auto space-x-1.5">
           <ToggleProjectHistory />
-          <ToggleWelcome />
+          <AccountMenu />
         </div>
       </header>
       <ProjectHistory />

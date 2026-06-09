@@ -208,11 +208,27 @@ current user + balance; `POST /api/auth/logout` clears the session.
 ## 10. Rollout phases
 
 1. **Phase 1 (done):** auth + accounts + starter credits + ledger schema.
-2. **Phase 2:** metering in `/api/chat` (deduct on generation, balance gate) +
-   a credit-balance indicator in the header.
-3. **Phase 3:** Stripe subscriptions + top-ups + webhooks.
+2. **Phase 2 (done):** metering in `/api/chat` (deduct on generation via
+   `onFinish` token usage, auth + balance gate) + a credit-balance indicator
+   and account menu in the header.
+3. **Phase 3 (done):** Stripe subscriptions + top-ups + webhooks
+   (`/api/billing/checkout`, `/api/billing/portal`, `/api/billing/webhook`).
+   Configure via `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and the
+   `STRIPE_PRICE_*` env vars; billing is inert (and the app unaffected) until
+   they're set.
 4. **Phase 4:** GitHub OAuth / magic links, route protection, usage dashboard.
 5. **Phase 5:** rollover caps, team billing, reconciliation job, alerting.
+
+### Stripe setup
+
+1. Create four recurring/one-off Prices in the Stripe dashboard (Starter $10/mo,
+   Pro $30/mo, Scale $100/mo, Top-up $12 one-time) and set their IDs in
+   `STRIPE_PRICE_STARTER` / `_PRO` / `_SCALE` / `_TOPUP`.
+2. Add a webhook endpoint pointing at `/api/billing/webhook` subscribed to
+   `checkout.session.completed`, `invoice.paid`, and
+   `customer.subscription.deleted`; put its signing secret in
+   `STRIPE_WEBHOOK_SECRET`.
+3. Set `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_APP_URL`.
 
 > All dollar figures are illustrative and driven by the constants in
 > `lib/billing.ts`. Re-run the margin formula whenever model rates or the credit

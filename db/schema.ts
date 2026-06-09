@@ -8,7 +8,9 @@ export const users = sqliteTable('users', {
   // Current spendable credit balance. The credit_ledger table is the source of
   // truth / audit log; this column is a denormalized running total for fast reads.
   creditsBalance: integer('credits_balance').notNull().default(0),
-  plan: text('plan').notNull().default('free'), // free, pro, scale
+  plan: text('plan').notNull().default('free'), // free, starter, pro, scale
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
