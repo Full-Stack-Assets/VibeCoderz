@@ -1,6 +1,6 @@
 import type { ChatUIMessage } from './types'
 import { MessagePart } from './message-part'
-import { BotIcon, UserIcon } from 'lucide-react'
+import { SparklesIcon } from 'lucide-react'
 import { memo, createContext, useContext, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -37,38 +37,38 @@ export const Message = memo(function Message({ message }: Props) {
     }
   }, [reasoningParts])
 
+  const isUser = message.role === 'user'
+
   return (
     <ReasoningContext.Provider
       value={{ expandedReasoningIndex, setExpandedReasoningIndex }}
     >
-      <div
-        className={cn({
-          'mr-20': message.role === 'assistant',
-          'ml-20': message.role === 'user',
-        })}
-      >
-        {/* Message Header */}
-        <div className="flex items-center gap-2 text-sm font-medium font-mono text-primary mb-1.5">
-          {message.role === 'user' ? (
-            <>
-              <UserIcon className="ml-auto w-4" />
-              <span>You</span>
-            </>
-          ) : (
-            <>
-              <BotIcon className="w-4" />
-              <span>Assistant ({message.metadata?.model})</span>
-            </>
-          )}
+      {isUser ? (
+        <div className="flex justify-end">
+          <div className="max-w-[85%] space-y-1.5 rounded-2xl bg-secondary px-4 py-2.5 text-secondary-foreground">
+            {message.parts.map((part, index) => (
+              <MessagePart key={index} part={part} partIndex={index} />
+            ))}
+          </div>
         </div>
-
-        {/* Message Content */}
-        <div className="space-y-1.5">
-          {message.parts.map((part, index) => (
-            <MessagePart key={index} part={part} partIndex={index} />
-          ))}
+      ) : (
+        <div className="flex gap-3">
+          <div
+            className={cn(
+              'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+              'bg-primary text-primary-foreground'
+            )}
+            aria-hidden
+          >
+            <SparklesIcon className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+            {message.parts.map((part, index) => (
+              <MessagePart key={index} part={part} partIndex={index} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </ReasoningContext.Provider>
   )
 })
