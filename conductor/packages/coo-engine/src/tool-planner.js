@@ -21,7 +21,33 @@ export function canPlanLive(modelId, env = process.env) {
   const model = getModel(modelId);
   if (!model) return false;
   if (model.provider === 'anthropic') return !!env.ANTHROPIC_API_KEY;
-  return false; // OpenAI/xAI live tool-calling not yet wired → caller uses simulation
+  if (model.provider === 'openai') return !!env.OPENAI_API_KEY;
+  if (model.provider === 'xai') return !!env.XAI_API_KEY;
+  return false;
+}
+
+// OpenAI-compatible providers: REST base URL, key env var, and optional model
+// override env var. Anthropic is handled separately (different wire protocol).
+const OPENAI_COMPATIBLE = {
+  openai: { baseURL: 'https://api.openai.com/v1', keyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL' },
+  xai: { baseURL: 'https://api.x.ai/v1', keyEnv: 'XAI_API_KEY', modelEnv: 'XAI_MODEL' },
+};
+
+/**
+ * Unified live planner factory: returns an agentic-loop planner backed by the
+ * chosen model's provider, or null when no key is configured (caller falls back
+ * to the simulated planner). Anthropic uses its native tool_use protocol;
+ * OpenAI and xAI use the OpenAI-compatible tool_calls protocol.
+ */
+export function makeLiveToolPlanner({ modelId, system, messages, tools, maxTokens = 1024 }) {
+  const model = getModel(modelId);
+  if (!model || !canPlanLive(modelId)) return null;
+  if (model.provider === 'anthropic') {
+    return makeAnthropicToolPlanner({ modelId, system, messages, tools, maxTokens });
+  }
+  const cfg = OPENAI_COMPATIBLE[model.provider];
+  if (!cfg) return null;
+  return makeOpenAIToolPlanner({ modelId, system, messages, tools, maxTokens, ...cfg });
 }
 
 /**
@@ -110,5 +136,83 @@ export function makeAnthropicToolPlanner({ modelId, system, messages, tools, max
     // Final answer: concatenate text blocks.
     const text = lastAssistantContent.filter((b) => b.type === 'text').map((b) => b.text).join('');
     return { type: 'final', text };
+  };
+}
+
+/**
+ * Build an OpenAI-compatible planner (OpenAI, xAI, …). Uses the standard
+ * `tool_calls` protocol: the model returns function calls, we execute them and
+ * reply with `role: 'tool'` messages keyed by tool_call_id. Emits one tool call
+ * per loop iteration, queueing any extras from the same assistant turn.
+ */
+export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseURL, keyEnv, modelEnv, maxTokens = 1024 }) {
+  const model = getModel(modelId);
+  const wire = process.env[modelEnv] || wireId(model);
+  const openaiTools = tools.map((t) => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+
+  const convo = [
+    ...(system ? [{ role: 'system', content: system }] : []),
+    ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content) })),
+  ];
+
+  let queue = []; // pending tool_calls from the latest assistant turn
+  let awaiting = null; // { id } of the call we emitted, awaiting its result
+
+  async function callModel() {
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env[keyEnv]}` },
+      body: JSON.stringify({
+        model: wire,
+        max_tokens: maxTokens,
+        messages: convo,
+        tools: openaiTools,
+        tool_choice: 'auto',
+      }),
+    });
+    if (!res.ok) throw new Error(`${baseURL} ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message || {};
+  }
+
+  const parseArgs = (s) => {
+    try {
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  return async function planner(steps) {
+    // 1) Fold the just-executed tool result back into the transcript.
+    if (awaiting) {
+      const last = steps[steps.length - 1];
+      convo.push({ role: 'tool', tool_call_id: awaiting.id, content: resultText(last?.result) });
+      awaiting = null;
+    }
+
+    // 2) Drain queued tool calls one per iteration.
+    if (queue.length > 0) {
+      const call = queue.shift();
+      awaiting = { id: call.id };
+      return { type: 'tool', tool: call.function.name, args: parseArgs(call.function.arguments) };
+    }
+
+    // 3) Ask the model for its next move.
+    const msg = await callModel();
+    const calls = msg.tool_calls || [];
+    if (calls.length > 0) {
+      // The assistant turn (with tool_calls) must be in the transcript before its results.
+      convo.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
+      queue = calls;
+      const call = queue.shift();
+      awaiting = { id: call.id };
+      return { type: 'tool', tool: call.function.name, args: parseArgs(call.function.arguments) };
+    }
+
+    return { type: 'final', text: msg.content || '' };
   };
 }

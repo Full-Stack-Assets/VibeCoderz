@@ -68,11 +68,13 @@ documented in `packages/coo-engine/src/core.js`.
 - **Agent mode** (`runAgenticTurn`) — toggle **Agent** in the header and the
   COO-routed model autonomously drives the tools: classify → route → loop
   (call tool → feed result back → repeat) until it answers, with every tool
-  step shown inline in the reply. With `ANTHROPIC_API_KEY` set, an
-  Anthropic-routed turn uses **real native tool-calling**
-  (`makeAnthropicToolPlanner`); otherwise a deterministic simulated planner
-  drives the exact same loop, so it works with zero config and degrades safely
-  on any live-path error.
+  step shown inline in the reply. **Live tool-calling is wired for every
+  provider** (`makeLiveToolPlanner`): Anthropic via its native `tool_use`
+  protocol, OpenAI and xAI via the OpenAI-compatible `tool_calls` protocol —
+  activated whenever the routed model's provider key is set
+  (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`). With no key, a
+  deterministic simulated planner drives the exact same loop, so it works with
+  zero config and degrades safely on any live-path error.
 
 ## Run it
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { routeTurn, complete, makeAnthropicToolPlanner, canPlanLive } from '@conductor/coo-engine'
+import { routeTurn, complete, makeLiveToolPlanner } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -80,13 +80,18 @@ async function runAgentic(
   messages: { role: string; content: string }[]
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
   const registry = new ToolRegistry({ executor: getExecutor() })
-  if (canPlanLive(modelId)) {
+  // Live tool-calling when the routed model's provider has a key (Anthropic
+  // native, OpenAI/xAI tool_calls). Null → no key → simulated planner.
+  const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
+  if (livePlanner) {
     try {
-      const planner = makeAnthropicToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS }) as unknown as Planner
-      const out = (await runAgenticTurn({ planner, registry })) as { text: string; steps: ToolStep[] }
+      const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry })) as {
+        text: string
+        steps: ToolStep[]
+      }
       return { ...out, simulated: false }
     } catch {
-      // fall through to the simulated planner
+      // fall through to the simulated planner on any live-path error
     }
   }
   const planner = makeSimulatedPlanner(messages) as unknown as Planner
