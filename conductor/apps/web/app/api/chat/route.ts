@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
-import { routeTurn, complete } from '@conductor/coo-engine'
+import { routeTurn, complete, makeAnthropicToolPlanner, canPlanLive } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
+import {
+  ToolRegistry,
+  getExecutor,
+  TOOLS,
+  runAgenticTurn,
+  makeSimulatedPlanner,
+} from '@conductor/agent-tools'
 import type { RouteDecision } from '@/lib/types'
 
 interface CompletionResult {
@@ -8,6 +15,21 @@ interface CompletionResult {
   costUSD: number
   simulated: boolean
 }
+
+interface ToolStep {
+  tool: string
+  args: Record<string, unknown>
+  result: { ok: boolean; output?: string; error?: string }
+}
+
+// Bridges the JS planner factories (whose literal `type` widens to string) to
+// the agentic loop's expected action union.
+type Planner = (steps: ToolStep[]) => Promise<{
+  type: 'tool' | 'final'
+  tool?: string
+  args?: Record<string, unknown>
+  text?: string
+}>
 
 interface MemoryStore {
   createConversation: (title?: string) => Promise<{ id: string }>
@@ -47,6 +69,29 @@ interface Body {
   preferModel?: string
   qualityFloor?: number
   conversationId?: string
+  agentic?: boolean
+}
+
+// Agentic turn: the COO-routed model autonomously drives the sandbox tools.
+// Live tool-calling when the provider has a key (Anthropic), else a deterministic
+// simulated planner. Always degrades to simulation on any live-path error.
+async function runAgentic(
+  modelId: string,
+  messages: { role: string; content: string }[]
+): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
+  const registry = new ToolRegistry({ executor: getExecutor() })
+  if (canPlanLive(modelId)) {
+    try {
+      const planner = makeAnthropicToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS }) as unknown as Planner
+      const out = (await runAgenticTurn({ planner, registry })) as { text: string; steps: ToolStep[] }
+      return { ...out, simulated: false }
+    } catch {
+      // fall through to the simulated planner
+    }
+  }
+  const planner = makeSimulatedPlanner(messages) as unknown as Planner
+  const out = (await runAgenticTurn({ planner, registry })) as { text: string; steps: ToolStep[] }
+  return { ...out, simulated: true }
 }
 
 const lastUser = (messages: { role: string; content: string }[]) =>
@@ -91,7 +136,37 @@ export async function POST(req: Request) {
     })
   }
 
-  // 3) Run the completion on the chosen model (live if a key is set, else sim).
+  // 3a) Agentic turn → the model drives sandbox tools through the COO router.
+  if (body.agentic) {
+    let agent: { text: string; steps: ToolStep[]; simulated: boolean }
+    try {
+      agent = await runAgentic(decision.model.id, messages)
+    } catch (err) {
+      return NextResponse.json(
+        { error: `agentic turn failed: ${(err as Error).message}`, decision },
+        { status: 502 }
+      )
+    }
+    // Approximate cost: one model call per tool step plus the final answer.
+    const costUSD = Number((decision.estCostUSD * (agent.steps.length + 1)).toFixed(6))
+    const conversationId = await persist(
+      body.conversationId,
+      lastUser(messages),
+      agent.text,
+      { model: decision.model.id, agentic: true, steps: agent.steps.length, simulated: agent.simulated }
+    )
+    return NextResponse.json({
+      text: agent.text,
+      steps: agent.steps,
+      decision,
+      costUSD,
+      simulated: agent.simulated,
+      spentUSD: Number((spentUSD + costUSD).toFixed(6)),
+      conversationId,
+    })
+  }
+
+  // 3b) Standard turn → a single completion on the chosen model.
   let result: CompletionResult
   try {
     result = (await complete(decision.model.id, {

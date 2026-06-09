@@ -11,6 +11,7 @@
 
 export { routeTurn, estimateTurnCostUSD } from './router.js';
 export { complete, simulate } from './llm.js';
+export { makeAnthropicToolPlanner, canPlanLive } from './tool-planner.js';
 export { classifyTurn } from './classify.js';
 export { MODEL_CATALOG, getModel, modelsAsAgents } from './catalog.js';
 export {

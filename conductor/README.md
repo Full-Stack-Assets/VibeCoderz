@@ -65,6 +65,14 @@ documented in `packages/coo-engine/src/core.js`.
   lets MCP servers contribute tools behind the same dispatch surface. Try it
   live in the **Sandbox** card in the orchestration panel, or via
   `POST /api/tools/execute`.
+- **Agent mode** (`runAgenticTurn`) — toggle **Agent** in the header and the
+  COO-routed model autonomously drives the tools: classify → route → loop
+  (call tool → feed result back → repeat) until it answers, with every tool
+  step shown inline in the reply. With `ANTHROPIC_API_KEY` set, an
+  Anthropic-routed turn uses **real native tool-calling**
+  (`makeAnthropicToolPlanner`); otherwise a deterministic simulated planner
+  drives the exact same loop, so it works with zero config and degrades safely
+  on any live-path error.
 
 ## Run it
 
@@ -87,8 +95,8 @@ cp .env.example apps/web/.env.local
 
 ## Test it
 
-The orchestration core, memory layer, and tool sandbox are unit-tested with the
-Node test runner (21 tests, no install required):
+The orchestration core, memory layer, tool sandbox, and agentic loop are
+unit-tested with the Node test runner (26 tests, no install required):
 
 ```bash
 pnpm test
