@@ -56,6 +56,17 @@ export const MODEL_CATALOG = [
     pricing: { input: 0.5, output: 2 },
     blurb: 'Fastest & cheapest. Great for analysis at scale.',
   },
+  {
+    id: 'google/gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    provider: 'google',
+    type: 'reasoning',
+    capability: 0.93,
+    costPerSec: 0.009,
+    maxLatency: 1800,
+    pricing: { input: 1.25, output: 10 },
+    blurb: 'Google’s multimodal reasoner, huge context — cheaper than Opus.',
+  },
 ];
 
 export function getModel(id) {

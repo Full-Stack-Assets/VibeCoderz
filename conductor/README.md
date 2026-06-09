@@ -68,11 +68,13 @@ documented in `packages/coo-engine/src/core.js`.
 - **Agent mode** (`runAgenticTurn`) — toggle **Agent** in the header and the
   COO-routed model autonomously drives the tools: classify → route → loop
   (call tool → feed result back → repeat) until it answers, with every tool
-  step shown inline in the reply. With `ANTHROPIC_API_KEY` set, an
-  Anthropic-routed turn uses **real native tool-calling**
-  (`makeAnthropicToolPlanner`); otherwise a deterministic simulated planner
-  drives the exact same loop, so it works with zero config and degrades safely
-  on any live-path error.
+  step shown inline in the reply. **Live tool-calling is wired for every
+  provider** (`makeLiveToolPlanner`): Anthropic via its native `tool_use`
+  protocol, OpenAI and xAI via the OpenAI-compatible `tool_calls` protocol —
+  activated whenever the routed model's provider key is set
+  (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`). With no key, a
+  deterministic simulated planner drives the exact same loop, so it works with
+  zero config and degrades safely on any live-path error.
 
 ## Run it
 
@@ -85,12 +87,18 @@ pnpm install
 pnpm dev            # → http://localhost:3000
 ```
 
-Add any provider key to switch that provider's models to **live** responses; the
-router automatically uses whichever providers are configured:
+**One gateway key makes every model live** — including Gemini. Because the
+catalog ids are already `provider/model` slugs, a single **Vercel AI Gateway**
+or **OpenRouter** key fronts Claude, GPT, Grok, and Gemini over one
+OpenAI-compatible endpoint (used for both completions and agentic tool-calling).
+A gateway takes precedence over per-provider keys.
 
 ```bash
 cp .env.example apps/web/.env.local
-# set ANTHROPIC_API_KEY and/or OPENAI_API_KEY and/or XAI_API_KEY
+# RECOMMENDED — one key, every model:
+#   AI_GATEWAY_API_KEY=…   (Vercel AI Gateway)   or   OPENROUTER_API_KEY=…
+# OR native per-provider:
+#   ANTHROPIC_API_KEY / OPENAI_API_KEY / XAI_API_KEY   (Gemini needs a gateway)
 ```
 
 ## Test it

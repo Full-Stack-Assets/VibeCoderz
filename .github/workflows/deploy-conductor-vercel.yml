@@ -59,13 +59,14 @@ jobs:
         if: steps.guard.outputs.skip == 'false'
         run: npm install -g vercel@latest
 
-      - name: Deploy (creates the "conductor" project on first run)
+      - name: Deploy (Vercel builds remotely from the monorepo root)
         if: steps.guard.outputs.skip == 'false'
-        working-directory: conductor/apps/web
+        working-directory: conductor
         run: |
-          # --yes accepts the inferred project settings; Next.js + the parent
-          # pnpm workspace are auto-detected. Project name defaults to the repo
-          # dir; pass --name on first link if you want to force "conductor".
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN" || true
-          vercel build --prod --token="$VERCEL_TOKEN"
-          vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
+          # Deploy from the workspace root so the whole pnpm monorepo is uploaded
+          # and Vercel builds it in its own environment (no prebuilt/symlink
+          # hydration issues). conductor/vercel.json sets framework + build/output.
+          # --yes accepts inferred settings and creates the "conductor" project on
+          # first run.
+          vercel deploy --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/deploy.txt
+          echo "DEPLOY_URL=$(tail -n1 /tmp/deploy.txt)" >> "$GITHUB_OUTPUT"
