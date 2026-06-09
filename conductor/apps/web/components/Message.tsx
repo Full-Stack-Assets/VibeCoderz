@@ -1,7 +1,29 @@
 'use client'
 
+import { useState } from 'react'
 import { Burst } from './Burst'
 import type { Msg } from '@/lib/types'
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      className="copy-btn"
+      title="Copy"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setDone(true)
+          setTimeout(() => setDone(false), 1200)
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+    >
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -55,10 +77,36 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             <span />
           </div>
         ) : (
-          <div
-            className="assistant-body"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-          />
+          <>
+            {msg.steps && msg.steps.length > 0 && (
+              <div className="tool-steps">
+                {msg.steps.map((s, i) => {
+                  const arg =
+                    s.tool === 'run_command'
+                      ? String(s.args.command ?? '')
+                      : s.tool === 'write_file'
+                        ? String(s.args.path ?? '')
+                        : String(s.args.dir ?? '.')
+                  return (
+                    <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
+                      <div className="tool-step-h">
+                        <span className="tool-badge">{s.tool}</span>
+                        <code>{arg}</code>
+                        <span className="tool-status">{s.result.ok ? '✓' : '✗'}</span>
+                      </div>
+                      <pre className="tool-step-out">
+                        {s.result.ok ? s.result.output || '(no output)' : s.result.error}
+                      </pre>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <div
+              className="assistant-body"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+            />
+          </>
         )}
         {msg.decision?.model && !msg.pending && (
           <div className="msg-meta">
@@ -75,6 +123,7 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             {msg.simulated && <span className="tag sim">simulated</span>}
             {msg.decision.fallback && <span className="tag">fallback</span>}
             {msg.decision.overridden && <span className="tag">override</span>}
+            {msg.content && <CopyButton text={msg.content} />}
           </div>
         )}
       </div>

@@ -1,71 +1,56 @@
-name: Deploy Conductor to Vercel
+name: Configure Conductor Vercel project
 
-# Deploys conductor/apps/web to Vercel.
+# Conductor deploys via Vercel's NATIVE Git integration (the `conductor`
+# project). This workflow (idempotently) sets that project's Root Directory to
+# `conductor/apps/web` via the Vercel API so native builds resolve, and dumps the
+# latest deployment's build logs for diagnosis.
 #
-# ZERO-DASHBOARD SETUP: add a single repo secret `VERCEL_TOKEN`
-# (Settings → Secrets and variables → Actions). On the next push to main that
-# touches conductor/** — or a manual run — the Vercel CLI creates a NEW project
-# named "conductor" and deploys it to production. No project needs to exist
-# first. Optionally set VERCEL_ORG_ID / VERCEL_PROJECT_ID to target an existing
-# project/scope instead.
+# Requires the repo secret VERCEL_TOKEN. No CLI deploy here — Vercel's git
+# integration owns deployments (preview per PR, production on main).
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'conductor/**'
       - '.github/workflows/deploy-conductor-vercel.yml'
-  workflow_dispatch:
 
 concurrency:
-  group: conductor-vercel
+  group: conductor-vercel-config
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  configure:
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PROJECT_ID: prj_y8NXnCPK2lCZJeq1fYTSU37UhLg5
+      TEAM_SLUG: full-stack-assets-projects
     steps:
-      - name: Skip if no token configured
-        id: guard
+      - name: Set Root Directory on the conductor project
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "VERCEL_TOKEN secret not set — skipping deploy (no-op)."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_TOKEN not set — skipping (no-op)."
+            exit 0
           fi
+          code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PATCH \
+            "https://api.vercel.com/v9/projects/${PROJECT_ID}?slug=${TEAM_SLUG}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"rootDirectory":"conductor/apps/web","framework":"nextjs"}')
+          echo "HTTP $code"
+          test "$code" = "200"
+          echo "rootDirectory set to: $(jq -r '.rootDirectory' /tmp/resp.json)"
 
-      - name: Checkout
-        if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        if: steps.guard.outputs.skip == 'false'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node
-        if: steps.guard.outputs.skip == 'false'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Vercel CLI
-        if: steps.guard.outputs.skip == 'false'
-        run: npm install -g vercel@latest
-
-      - name: Deploy (creates the "conductor" project on first run)
-        if: steps.guard.outputs.skip == 'false'
-        working-directory: conductor/apps/web
+      - name: Dump latest conductor deployment build logs
         run: |
-          # --yes accepts the inferred project settings; Next.js + the parent
-          # pnpm workspace are auto-detected. Project name defaults to the repo
-          # dir; pass --name on first link if you want to force "conductor".
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN" || true
-          vercel build --prod --token="$VERCEL_TOKEN"
-          vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
+          if [ -z "$VERCEL_TOKEN" ]; then echo "no token"; exit 0; fi
+          dep=$(curl -sS -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "https://api.vercel.com/v6/deployments?projectId=${PROJECT_ID}&slug=${TEAM_SLUG}&limit=1")
+          id=$(printf '%s' "$dep" | jq -r '.deployments[0].uid')
+          state=$(printf '%s' "$dep" | jq -r '.deployments[0].state')
+          echo "latest deployment: $id  state: $state"
+          echo "===== BUILD LOGS (tail) ====="
+          curl -sS -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "https://api.vercel.com/v3/deployments/${id}/events?builds=1&limit=400" \
+            | jq -r '.. | .text? // empty' | tail -n 90

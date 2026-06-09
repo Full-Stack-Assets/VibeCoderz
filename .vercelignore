@@ -1,4 +1,0 @@
-# Conductor is a self-contained pnpm-workspace monorepo with its own build.
-# It is not part of this (root) Vercel project's deployment, so keep it out of
-# the build context entirely.
-conductor

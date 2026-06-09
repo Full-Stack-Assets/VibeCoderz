@@ -11,8 +11,10 @@
 
 import { TOOLS, TOOL_NAMES, getTool } from './tools.js';
 import { getExecutor, SimulatedExecutor, LocalSandboxExecutor } from './executors.js';
+import { runAgenticTurn, makeSimulatedPlanner } from './agent-loop.js';
 
 export { TOOLS, TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor };
+export { runAgenticTurn, makeSimulatedPlanner };
 
 /**
  * Registry of available tools. Seeded with the built-in sandbox tools; MCP
