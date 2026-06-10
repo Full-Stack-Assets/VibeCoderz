@@ -75,6 +75,19 @@ test('COO gets close to the best achievable quality', async () => {
   assert.ok(r.headline.vsOracle.qualityOfBestPct >= 95);
 });
 
+test('per-domain breakdown covers every domain and holds quality everywhere', async () => {
+  const r = await evaluate();
+  const domains = new Set(r.byDomain.map((d) => d.domain));
+  for (const d of ['coding', 'reasoning', 'writing', 'analysis', 'research', 'data', 'vision']) {
+    assert.ok(domains.has(d), `breakdown covers ${d}`);
+  }
+  // Routing should retain most of premium quality in EVERY domain, not just on average.
+  for (const d of r.byDomain) {
+    assert.ok(d.retentionPct >= 90, `${d.domain} retention ${d.retentionPct}% >= 90%`);
+    assert.ok(d.tasks > 0 && d.models.length > 0);
+  }
+});
+
 test('routing correctness: COO never sends a vision task to a text-only model', () => {
   for (const task of DATASET.filter((t) => t.requiresVision)) {
     const modelId = cooStrategy(task);

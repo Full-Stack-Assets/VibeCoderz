@@ -129,7 +129,7 @@ cp .env.example apps/web/.env.local
 
 The orchestration core, memory layer, tool sandbox, agentic loop, multimodal
 routing, capability tools, and the evaluation harness are unit-tested with the
-Node test runner (54 tests, no install required):
+Node test runner (56 tests, no install required):
 
 ```bash
 pnpm test
@@ -144,7 +144,7 @@ node --test packages/eval           # cost/quality benchmark + claims
 
 Routing is only worth anything if it saves money *without* losing quality. That
 claim is **measured, not asserted** — `@conductor/eval` scores the **shipping
-`routeTurn`** against pin-one-model baselines over an 18-task golden set
+`routeTurn`** against pin-one-model baselines over a 30-task golden set
 (coding, reasoning, writing, analysis, research, data, vision):
 
 ```bash
@@ -157,13 +157,14 @@ Current result (synthetic oracle — see `BENCHMARKS.md`):
 
 | Strategy | Avg quality | $ / task |
 | --- | ---: | ---: |
-| **COO (this router)** | **98.1%** | **$0.0083** |
-| Always-Premium (Opus) | 98.7% | $0.0257 |
-| Always-Cheapest (Grok) | 86.9% | $0.0021 |
+| **COO (this router)** | **97.8%** | **$0.0079** |
+| Always-Premium (Opus) | 98.6% | $0.0257 |
+| Always-Cheapest (Grok) | 87.8% | $0.0021 |
 
-> **COO is ~68% cheaper than always-using-the-premium model while retaining
-> ~99% of its quality, and delivers ~13% higher quality than always-using the
-> cheapest.** Those two inequalities are locked in as regression tests.
+> **COO is ~69% cheaper than always-using-the-premium model while retaining
+> ~99% of its quality, and delivers ~11% higher quality than always-using the
+> cheapest** — and it holds ≥98% of premium quality in *every* domain, not just
+> on average. Those properties are locked in as regression tests.
 
 The crux is the **quality oracle**, which is deliberately explicit and swappable
 (`packages/eval/src/oracle.js`). The default is a transparent *synthetic prior*
