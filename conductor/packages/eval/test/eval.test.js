@@ -10,6 +10,7 @@ import {
   renderReport,
   cooStrategy,
   qualityOracleStrategy,
+  classifyTransportError,
 } from '../src/index.js';
 import { getModel } from '@conductor/coo-engine';
 
@@ -116,4 +117,22 @@ test('report renders a Markdown table with the headline', async () => {
   assert.match(md, /## Headline/);
   assert.match(md, /COO/);
   assert.match(md, /cheaper while retaining/);
+});
+
+test('classifyTransportError: a blocked gateway host is network, not auth', () => {
+  // The real failure mode in a restricted environment: the proxy returns a 403
+  // whose body is "Host not in allowlist". Despite the 403, this is a network/
+  // policy problem, so the preflight must surface the allowlist fix — not "bad key".
+  assert.equal(
+    classifyTransportError(new Error('https://ai-gateway.vercel.sh/v1 403: Host not in allowlist')),
+    'network'
+  );
+  assert.equal(classifyTransportError(new Error('fetch failed')), 'network');
+  assert.equal(classifyTransportError('getaddrinfo ENOTFOUND api.example'), 'network');
+  // A genuine credential rejection (no allowlist hint) is auth.
+  assert.equal(
+    classifyTransportError(new Error('https://api.anthropic.com 401: x-api-key header is required')),
+    'auth'
+  );
+  assert.equal(classifyTransportError(new Error('boom')), 'unknown');
 });

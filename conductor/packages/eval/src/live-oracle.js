@@ -26,6 +26,65 @@ export function canJudge(env = process.env) {
   );
 }
 
+/**
+ * Classify a transport failure so the CLI can print an actionable fix instead
+ * of a raw 403 stack trace. Pure (operates on the error text) so it's unit-
+ * testable with no network. Order matters: a blocked host arrives AS a 403
+ * ("Host not in allowlist"), so the network check must run before the auth one.
+ *   - 'network' : host blocked by an allowlist / DNS / connection failure — the
+ *                 gateway is unreachable from this environment.
+ *   - 'auth'    : the gateway/provider rejected the credentials (bad/absent key).
+ *   - 'unknown' : anything else.
+ */
+export function classifyTransportError(err) {
+  const msg = String(err?.message ?? err);
+  if (/not in allowlist|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|ECONNRESET|fetch failed/i.test(msg)) {
+    return 'network';
+  }
+  if (/\b401\b|\b403\b|unauthor|forbidden|invalid[\s_-]*(api|key)|x-api-key|api key/i.test(msg)) {
+    return 'auth';
+  }
+  return 'unknown';
+}
+
+/** Pick the cheapest model the current config can reach live for the probe. */
+function probeModelId(env = process.env) {
+  if (gatewayConfig(env)) return 'xai/grok-4.1-fast-reasoning'; // gateway reaches every model
+  if (env.XAI_API_KEY) return 'xai/grok-4.1-fast-reasoning';
+  if (env.OPENAI_API_KEY) return 'openai/gpt-5.3-codex';
+  if (env.ANTHROPIC_API_KEY) return 'anthropic/claude-sonnet-4.6';
+  return 'xai/grok-4.1-fast-reasoning';
+}
+
+/**
+ * PREFLIGHT — make one cheap real completion before the full benchmark so a
+ * misconfigured gateway (blocked host, invalid key) fails fast with an
+ * actionable message instead of throwing a raw 403 on task 1 of N. Returns a
+ * result object rather than throwing, so the CLI can render a clean diagnostic.
+ *
+ * @returns {Promise<{ok:boolean, kind?:string, detail:string, provider?:string}>}
+ */
+export async function preflight({ env = process.env } = {}) {
+  const modelId = probeModelId(env);
+  try {
+    const r = await complete(modelId, {
+      system: 'Connectivity check. Reply with the single token OK.',
+      messages: [{ role: 'user', content: 'OK?' }],
+      maxTokens: 4,
+    });
+    if (r.simulated) {
+      return {
+        ok: false,
+        kind: 'simulated',
+        detail: `probe to ${modelId} returned a simulated completion (no live transport)`,
+      };
+    }
+    return { ok: true, provider: r.provider, detail: `reached ${r.provider} via ${modelId}` };
+  } catch (err) {
+    return { ok: false, kind: classifyTransportError(err), detail: String(err?.message ?? err) };
+  }
+}
+
 const JUDGE_SYSTEM =
   'You are a strict evaluation judge. Score how well an AI response answers a ' +
   'request on a 0–100 scale: 0 = wrong/unusable, 60 = acceptable, 100 = expert, ' +
