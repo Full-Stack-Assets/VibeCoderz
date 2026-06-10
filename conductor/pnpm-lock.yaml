@@ -19,6 +19,9 @@ importers:
       '@conductor/coo-engine':
         specifier: workspace:*
         version: link:../../packages/coo-engine
+      '@conductor/eval':
+        specifier: workspace:*
+        version: link:../../packages/eval
       next:
         specifier: ^16.0.10
         version: 16.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -47,6 +50,8 @@ importers:
   packages/agent-tools: {}
 
   packages/coo-engine: {}
+
+  packages/eval: {}
 
 packages:
 

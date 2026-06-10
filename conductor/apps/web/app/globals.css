@@ -717,3 +717,54 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
   .panel.show { transform: translateX(0); }
   .scrim { position: fixed; inset: 0; background: rgba(20,20,19,0.28); z-index: 35; }
 }
+
+/* ---- Benchmark link (header) --------------------------------------------- */
+.bench-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-soft); text-decoration: none;
+  padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  transition: border-color 0.15s, color 0.15s, background 0.15s; white-space: nowrap;
+}
+.bench-link:hover { border-color: var(--coral); color: var(--coral-press); background: var(--coral-tint); }
+
+/* ---- Benchmark page ------------------------------------------------------ */
+.bench { min-height: 100vh; background: var(--bg); color: var(--text); }
+.bench-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+}
+.bench-back { color: var(--coral-press); text-decoration: none; font-weight: 600; font-size: 14.5px; }
+.bench-back:hover { color: var(--coral); }
+.bench-oracle { font-size: 12px; color: var(--faint); font-family: var(--font-mono); }
+.bench-wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+.bench-wrap h1 { font-family: var(--font-serif, var(--font-sans)); font-size: 32px; line-height: 1.2; margin: 0 0 14px; }
+.bench-wrap h2 { font-size: 19px; margin: 40px 0 14px; }
+.bench-sub { color: var(--muted); font-size: 15.5px; line-height: 1.6; margin: 0 0 28px; }
+
+.bench-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.bench-card {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  padding: 20px; box-shadow: var(--shadow-soft);
+}
+.bench-card.accent { border-color: transparent; background: var(--coral-tint); }
+.bench-card-k { font-size: 34px; font-weight: 700; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.bench-card.accent .bench-card-k { color: var(--coral-press); }
+.bench-card-l { margin-top: 8px; font-size: 13.5px; font-weight: 600; color: var(--text-soft); }
+.bench-card-s { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+
+.bench-tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.bench-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.bench-table th, .bench-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.bench-table thead th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--surface-sunk); }
+.bench-table tbody tr:last-child td { border-bottom: none; }
+.bench-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.bench-table .mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }
+.bench-table tr.hl td { background: var(--coral-tint); font-weight: 600; }
+
+.bench-note { margin-top: 36px; border-left: 3px solid var(--line-strong); padding: 4px 0 4px 18px; }
+.bench-note h3 { font-size: 15px; margin: 0 0 10px; }
+.bench-note ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.bench-note li { margin-bottom: 8px; }
+.bench-note code { font-family: var(--font-mono); font-size: 0.86em; background: var(--surface-sunk); padding: 1px 5px; border-radius: 5px; }
