@@ -4,7 +4,7 @@
 
 /** Render the per-strategy comparison as a Markdown report string. */
 export function renderReport(result, { dataset } = {}) {
-  const { strategies, headline, oracle, n } = result;
+  const { strategies, headline, oracle, n, byDomain = [] } = result;
 
   const lines = [];
   lines.push('# Conductor — Routing Benchmark');
@@ -52,6 +52,21 @@ export function renderReport(result, { dataset } = {}) {
     );
   }
   lines.push('');
+
+  // Per-domain breakdown: where cheap-good-enough holds vs where premium earns it.
+  if (byDomain.length) {
+    lines.push('## Where routing wins (per domain)');
+    lines.push('');
+    lines.push('| Domain | Tasks | COO quality | Premium quality | Retention | COO $ / task | Models COO used |');
+    lines.push('| --- | ---: | ---: | ---: | ---: | ---: | --- |');
+    for (const d of byDomain) {
+      lines.push(
+        `| ${d.domain} | ${d.tasks} | ${(d.cooQuality * 100).toFixed(1)}% | ${(d.premiumQuality * 100).toFixed(1)}% | ` +
+          `${d.retentionPct}% | $${d.cooCostPerTask.toFixed(5)} | ${d.models.join(', ')} |`
+      );
+    }
+    lines.push('');
+  }
 
   // Per-domain routing (which model COO chose).
   const coo = strategies.find((s) => s.name.startsWith('COO'));

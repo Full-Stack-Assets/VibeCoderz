@@ -24,6 +24,15 @@ interface Strategy {
   qualityPerDollar: number
   rows: Row[]
 }
+interface DomainRow {
+  domain: string
+  tasks: number
+  cooQuality: number
+  premiumQuality: number
+  retentionPct: number
+  cooCostPerTask: number
+  models: string[]
+}
 interface Result {
   oracle: string
   n: number
@@ -33,6 +42,7 @@ interface Result {
     vsCheapest?: { extraCostPct: number | null; qualityGainPct: number }
     vsOracle?: { qualityOfBestPct: number }
   }
+  byDomain: DomainRow[]
 }
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -141,6 +151,41 @@ export default async function BenchmarkPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Per-domain breakdown */}
+        {result.byDomain.length > 0 && (
+          <>
+            <h2>Where routing wins (per domain)</h2>
+            <div className="bench-tablewrap">
+              <table className="bench-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th className="num">Tasks</th>
+                    <th className="num">COO quality</th>
+                    <th className="num">Premium</th>
+                    <th className="num">Retention</th>
+                    <th className="num">COO $ / task</th>
+                    <th>Models COO used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.byDomain.map((d) => (
+                    <tr key={d.domain}>
+                      <td style={{ textTransform: 'capitalize' }}>{d.domain}</td>
+                      <td className="num">{d.tasks}</td>
+                      <td className="num">{pct(d.cooQuality)}</td>
+                      <td className="num">{pct(d.premiumQuality)}</td>
+                      <td className="num">{d.retentionPct}%</td>
+                      <td className="num">{usd(d.cooCostPerTask)}</td>
+                      <td className="mono">{d.models.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* Per-task routing */}
         {coo && (

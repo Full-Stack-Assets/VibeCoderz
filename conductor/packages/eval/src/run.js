@@ -15,6 +15,32 @@ import { defaultStrategies } from './strategies.js';
 
 const round = (n, d = 6) => Number(n.toFixed(d));
 
+const avgBy = (rows, key) => (rows.length ? rows.reduce((s, r) => s + r[key], 0) / rows.length : 0);
+
+/**
+ * Per-domain breakdown: where does cheapest-good-enough routing hold up, and
+ * where does the premium model actually earn its price? Computed from the
+ * already-scored rows of the COO and premium strategies.
+ */
+function domainBreakdown(coo, premium) {
+  const domains = [...new Set(coo.rows.map((r) => r.domain))];
+  return domains.map((domain) => {
+    const cr = coo.rows.filter((r) => r.domain === domain);
+    const pr = premium ? premium.rows.filter((r) => r.domain === domain) : [];
+    const cooQuality = avgBy(cr, 'quality');
+    const premiumQuality = avgBy(pr, 'quality');
+    return {
+      domain,
+      tasks: cr.length,
+      cooQuality: round(cooQuality, 4),
+      premiumQuality: round(premiumQuality, 4),
+      retentionPct: premiumQuality > 0 ? round((cooQuality / premiumQuality) * 100, 1) : 100,
+      cooCostPerTask: round(avgBy(cr, 'cost')),
+      models: [...new Set(cr.map((r) => r.modelId))],
+    };
+  });
+}
+
 /** Score one strategy across the dataset. */
 export async function scoreStrategy(name, pick, { dataset, oracle }) {
   let totalCost = 0;
@@ -84,5 +110,7 @@ export async function evaluate(opts = {}) {
     };
   }
 
-  return { oracle: oracle.name, n: dataset.length, strategies: results, headline };
+  const byDomain = coo ? domainBreakdown(coo, premium) : [];
+
+  return { oracle: oracle.name, n: dataset.length, strategies: results, headline, byDomain };
 }
