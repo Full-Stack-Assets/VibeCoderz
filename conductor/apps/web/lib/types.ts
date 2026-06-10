@@ -21,10 +21,34 @@ export interface RouteDecision {
   reason: string
 }
 
+export interface Citation {
+  title: string
+  url: string
+  snippet?: string
+}
+
+export interface ColumnStats {
+  count: number
+  min: number
+  max: number
+  mean: number
+  median: number
+}
+
 export interface ToolStep {
   tool: string
   args: Record<string, unknown>
-  result: { ok: boolean; output?: string; error?: string }
+  result: {
+    ok: boolean
+    output?: string
+    error?: string
+    /** web_search: structured, rankable results for citation cards. */
+    results?: Citation[]
+    /** analyze_data: dataset shape + per-column numeric statistics. */
+    rows?: number
+    columns?: string[]
+    stats?: Record<string, ColumnStats>
+  }
 }
 
 export interface ChatResponse {

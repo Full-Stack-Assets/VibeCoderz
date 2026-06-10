@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Burst } from './Burst'
+import { Citations, DataChart } from './ToolResult'
 import type { Msg } from '@/lib/types'
 
 function CopyButton({ text }: { text: string }) {
@@ -111,6 +112,12 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
                       s.args.timezone ??
                       (s.tool === 'analyze_data' ? 'dataset' : s.args.dir ?? '.')
                   )
+                  // First-class rendering for research & data results; raw
+                  // output otherwise (and always for errors).
+                  const hasCitations =
+                    s.result.ok && s.tool === 'web_search' && !!s.result.results?.length
+                  const hasChart =
+                    s.result.ok && s.tool === 'analyze_data' && (!!s.result.stats || !!s.result.columns?.length)
                   return (
                     <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
                       <div className="tool-step-h">
@@ -118,9 +125,15 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
                         <code>{arg}</code>
                         <span className="tool-status">{s.result.ok ? '✓' : '✗'}</span>
                       </div>
-                      <pre className="tool-step-out">
-                        {s.result.ok ? s.result.output || '(no output)' : s.result.error}
-                      </pre>
+                      {hasCitations ? (
+                        <Citations query={String(s.args.query ?? '')} results={s.result.results!} />
+                      ) : hasChart ? (
+                        <DataChart rows={s.result.rows} columns={s.result.columns} stats={s.result.stats} />
+                      ) : (
+                        <pre className="tool-step-out">
+                          {s.result.ok ? s.result.output || '(no output)' : s.result.error}
+                        </pre>
+                      )}
                     </div>
                   )
                 })}

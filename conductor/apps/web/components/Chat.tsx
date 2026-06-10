@@ -304,6 +304,13 @@ export function Chat() {
             <span className="dot" />
             {routedLabel ? routedLabel : 'Auto-routed'}
           </div>
+          <a
+            className="bench-link"
+            href="/benchmark"
+            title="Cost/quality benchmark — measured evidence the routing pays off"
+          >
+            <ChartIcon /> Benchmark
+          </a>
           <button
             className={`agent-toggle ${agent ? 'on' : ''}`}
             onClick={() => setAgent((a) => !a)}
@@ -456,6 +463,14 @@ const FileIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
     <path d="M14 2v6h6" />
+  </svg>
+)
+const ChartIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3v18h18" />
+    <rect x="7" y="11" width="3" height="6" />
+    <rect x="12" y="7" width="3" height="10" />
+    <rect x="17" y="13" width="3" height="4" />
   </svg>
 )
 const MenuIcon = () => (
