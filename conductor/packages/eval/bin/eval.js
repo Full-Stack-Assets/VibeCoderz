@@ -14,9 +14,32 @@ import { fileURLToPath } from 'node:url';
 import { evaluate } from '../src/run.js';
 import { renderReport } from '../src/report.js';
 import { makeSyntheticOracle } from '../src/oracle.js';
-import { makeLiveOracle, canJudge } from '../src/live-oracle.js';
+import { makeLiveOracle, canJudge, preflight } from '../src/live-oracle.js';
 import { defaultStrategies } from '../src/strategies.js';
 import { DATASET } from '../src/dataset.js';
+
+// Turn a failed preflight into an actionable, one-screen diagnostic.
+function diagnose(pf) {
+  const fix = {
+    network:
+      "the AI gateway host looks blocked by this environment's network policy (e.g. " +
+      '"Host not in allowlist"). --live needs outbound access to the gateway — recreate the ' +
+      'environment with a policy that allows ai-gateway.vercel.sh, or use a reachable native ' +
+      'provider key.',
+    auth:
+      'the gateway/provider rejected the credentials. Check AI_GATEWAY_API_KEY (or the native ' +
+      'provider key) is set and valid.',
+    simulated:
+      'no live transport is configured. Set AI_GATEWAY_API_KEY (reaches every model) or a native ' +
+      'provider key, then retry --live.',
+    unknown: 'unexpected transport error — see detail above.',
+  };
+  return (
+    `Refusing --live: transport preflight failed (${pf.kind}).\n` +
+    `  detail: ${pf.detail}\n` +
+    `  fix:    ${fix[pf.kind] || fix.unknown}`
+  );
+}
 
 async function main() {
   const args = new Set(process.argv.slice(2));
@@ -30,8 +53,19 @@ async function main() {
       );
       process.exit(2);
     }
+    // Fail fast: one cheap real call up front, so a blocked host or bad key
+    // surfaces a clear fix instead of throwing a raw 403 on task 1 of N.
+    console.error('Preflighting live transport…');
+    const pf = await preflight();
+    if (!pf.ok) {
+      console.error(diagnose(pf));
+      process.exit(2);
+    }
     oracle = makeLiveOracle();
-    console.error(`Running LIVE benchmark with ${oracle.name} — this calls real models…`);
+    console.error(
+      `Preflight OK — ${pf.detail}. Running LIVE benchmark with ${oracle.name} across ` +
+        `${DATASET.length} tasks — this calls real models…`
+    );
   } else {
     oracle = makeSyntheticOracle();
   }

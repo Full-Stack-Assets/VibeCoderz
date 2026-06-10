@@ -10,7 +10,7 @@
 
 export { DATASET, VALID_TYPES } from './dataset.js';
 export { syntheticQuality, makeSyntheticOracle } from './oracle.js';
-export { makeLiveOracle, canJudge } from './live-oracle.js';
+export { makeLiveOracle, canJudge, preflight, classifyTransportError } from './live-oracle.js';
 export {
   cooStrategy,
   alwaysStrategy,
