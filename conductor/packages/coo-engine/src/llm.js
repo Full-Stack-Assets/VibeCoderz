@@ -115,8 +115,57 @@ function wireModelId(model) {
   return id;
 }
 
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * fetch() with bounded exponential backoff on TRANSIENT failures only.
+ *
+ * Completions through this client are idempotent (no server-side side effects),
+ * so a request that fails with a gateway 5xx, a 429, or a dropped connection is
+ * safe to replay. Gateways like Vercel AI return sporadic 500s under load; a
+ * single one would otherwise abort a long benchmark of ~hundreds of sequential
+ * calls. Non-retryable failures (4xx auth/validation) throw immediately so a
+ * misconfiguration still fails fast. Backoff is 250ms·2^n with jitter, honoring
+ * a numeric `Retry-After` when the server sends one.
+ *
+ * @param {string} url
+ * @param {object} init      fetch init
+ * @param {object} [opts]
+ * @param {number} [opts.retries=3]  max retries AFTER the first attempt
+ * @param {string} [opts.label]      provider label for error messages
+ */
+async function fetchWithRetry(url, init, { retries = 3, label = url } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, init);
+    } catch (err) {
+      // Network-level failure (DNS/connection/reset): retryable until exhausted.
+      lastErr = err;
+      if (attempt === retries) throw err;
+      await sleep(250 * 2 ** attempt + Math.floor(Math.random() * 250));
+      continue;
+    }
+    if (res.ok) return res;
+    const body = await res.text();
+    const httpErr = new Error(`${label} ${res.status}: ${body}`);
+    // Surface non-transient failures (4xx auth/validation) immediately so a
+    // misconfiguration fails fast instead of stalling through every retry.
+    if (!RETRYABLE_STATUS.has(res.status) || attempt === retries) throw httpErr;
+    lastErr = httpErr;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const backoff = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : 250 * 2 ** attempt + Math.floor(Math.random() * 250);
+    await sleep(backoff);
+  }
+  throw lastErr;
+}
+
 async function callAnthropic(model, { system, messages, maxTokens }) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -129,15 +178,14 @@ async function callAnthropic(model, { system, messages, maxTokens }) {
       system,
       messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toAnthropicContent(m.content) })),
     }),
-  });
-  if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  }, { label: 'anthropic' });
   const data = await res.json();
   const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
   return { text, usage: { input_tokens: data.usage?.input_tokens || 0, output_tokens: data.usage?.output_tokens || 0 } };
 }
 
 async function callOpenAICompatible(model, { system, messages, maxTokens }, { baseURL, apiKey, headers = {}, modelName }) {
-  const res = await fetch(`${baseURL}/chat/completions`, {
+  const res = await fetchWithRetry(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...headers },
     body: JSON.stringify({
@@ -150,8 +198,7 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
         ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
       ],
     }),
-  });
-  if (!res.ok) throw new Error(`${baseURL} ${res.status}: ${await res.text()}`);
+  }, { label: baseURL });
   const data = await res.json();
   return {
     text: data.choices?.[0]?.message?.content || '',
