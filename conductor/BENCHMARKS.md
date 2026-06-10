@@ -13,7 +13,7 @@ Comparison of the **COO router** against pin-one-model baselines over a 30-task 
 ## Headline
 
 - **vs Always-Premium (Opus):** 69.2% cheaper while retaining 81% of its quality.
-- **vs Always-Cheapest (Grok):** -12.3% higher quality for 284.5% more spend.
+- **vs Always-Cheapest (Grok):** 12.3% lower quality for 284.5% more spend.
 - **vs Quality-Oracle (best achievable):** COO reaches 69.8% of the best-possible quality — at a fraction of the premium cost.
 
 ## Where routing wins (per domain)
@@ -67,6 +67,6 @@ Comparison of the **COO router** against pin-one-model baselines over a 30-task 
 
 - The `COO` row calls the **shipping** `routeTurn` — this benchmarks the real router, not a reimplementation.
 - **Cost** uses `estimateTurnCostUSD` with the catalog pricing the product meters with.
-- **Quality** is currently the `synthetic` oracle: a transparent prior (capability vs task difficulty, specialty match, vision capability), not a live measurement. It exists so the harness runs deterministically in CI. Swap in the **LLM-judge** oracle (`--live`, requires a gateway/provider key) to replace the prior with measured scores — the strategies, dataset, and this report do not change.
+- **Quality** is the `live-judge(anthropic/claude-opus-4.6)` oracle: real model completions scored by an LLM judge on a 0–100 rubric. These are point-in-time live measurements (real model outputs + judge), not bit-for-bit reproducible. Run `pnpm eval` without `--live` to use the deterministic `synthetic` prior in CI — the strategies, dataset, and this report do not change.
 - Regenerate with `pnpm eval` (add `--write` to update this file).
 
