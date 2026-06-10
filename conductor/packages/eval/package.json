@@ -10,6 +10,9 @@
     "test": "node --test",
     "eval": "node bin/eval.js"
   },
+  "dependencies": {
+    "@conductor/coo-engine": "workspace:*"
+  },
   "keywords": ["evaluation", "benchmark", "llm", "routing", "cost-optimization"],
   "license": "MIT",
   "engines": { "node": ">=18.0.0" }

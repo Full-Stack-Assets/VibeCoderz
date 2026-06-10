@@ -9,8 +9,9 @@ import {
   defaultStrategies,
   renderReport,
   cooStrategy,
+  qualityOracleStrategy,
 } from '../src/index.js';
-import { getModel } from '../../coo-engine/src/index.js';
+import { getModel } from '@conductor/coo-engine';
 
 test('dataset is well-formed and covers every domain', () => {
   const domains = new Set();
@@ -81,6 +82,19 @@ test('routing correctness: COO never sends a vision task to a text-only model', 
     assert.ok(model && model.multimodal, `${task.id} routed to a multimodal model (got ${modelId})`);
   }
 });
+
+test('qualityOracleStrategy resolves correctly with an async (live) oracle', async () => {
+  // A live oracle's quality() is async; the strategy must await it rather than
+  // comparing Promises (which would silently pick the first model every time).
+  const asyncOracle = {
+    name: 'mock-live',
+    live: true,
+    quality: async (model) => (model.id === 'google/gemini-2.5-pro' ? 0.99 : 0.5),
+  };
+  const pick = qualityOracleStrategy(asyncOracle);
+  const id = await pick({ idealType: 'reasoning', difficulty: 0.5 });
+  assert.equal(id, 'google/gemini-2.5-pro');
+})
 
 test('report renders a Markdown table with the headline', async () => {
   const oracle = makeSyntheticOracle();

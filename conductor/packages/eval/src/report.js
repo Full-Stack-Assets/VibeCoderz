@@ -21,7 +21,7 @@ export function renderReport(result, { dataset } = {}) {
   lines.push('| Strategy | Avg quality | Total cost | $ / task | Quality / $ |');
   lines.push('| --- | ---: | ---: | ---: | ---: |');
   for (const s of strategies) {
-    const qpd = Number.isFinite(s.qualityPerDollar) ? s.qualityPerDollar.toLocaleString() : '∞';
+    const qpd = Number.isFinite(s.qualityPerDollar) ? s.qualityPerDollar.toLocaleString('en-US') : '∞';
     lines.push(
       `| ${s.name} | ${(s.avgQuality * 100).toFixed(1)}% | $${s.totalCost.toFixed(5)} | ` +
         `$${s.costPerTask.toFixed(5)} | ${qpd} |`

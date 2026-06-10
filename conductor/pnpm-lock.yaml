@@ -51,7 +51,11 @@ importers:
 
   packages/coo-engine: {}
 
-  packages/eval: {}
+  packages/eval:
+    dependencies:
+      '@conductor/coo-engine':
+        specifier: workspace:*
+        version: link:../coo-engine
 
 packages:
 

@@ -8,7 +8,7 @@
  * baselines — the "X% cheaper at Y% of the quality" claim, computed not asserted.
  */
 
-import { estimateTurnCostUSD, getModel } from '../../coo-engine/src/index.js';
+import { estimateTurnCostUSD, getModel } from '@conductor/coo-engine';
 import { DATASET } from './dataset.js';
 import { makeSyntheticOracle } from './oracle.js';
 import { defaultStrategies } from './strategies.js';

@@ -39,7 +39,30 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const usd = (n: number) => `$${n.toFixed(5)}`
 
 export default async function BenchmarkPage() {
-  const result = (await evaluate()) as Result
+  // Rendered at build time; guard so an eval error degrades gracefully rather
+  // than aborting `next build` (which would block the whole deploy).
+  let result: Result | null = null
+  try {
+    result = (await evaluate()) as Result
+  } catch (err) {
+    console.error('[benchmark] evaluate() failed:', err)
+  }
+  if (!result) {
+    return (
+      <div className="bench">
+        <header className="bench-top">
+          <Link href="/" className="bench-back" aria-label="Back to Conductor">
+            ← Conductor
+          </Link>
+        </header>
+        <div className="bench-wrap">
+          <h1>Benchmark unavailable</h1>
+          <p className="bench-sub">The routing benchmark could not be generated for this build.</p>
+        </div>
+      </div>
+    )
+  }
+
   const coo = result.strategies.find((s) => s.name.startsWith('COO'))
   const h = result.headline
   const isCoo = (s: Strategy) => s.name.startsWith('COO')
@@ -112,7 +135,7 @@ export default async function BenchmarkPage() {
                   <td className="num">{pct(s.avgQuality)}</td>
                   <td className="num">{usd(s.totalCost)}</td>
                   <td className="num">{usd(s.costPerTask)}</td>
-                  <td className="num">{Number.isFinite(s.qualityPerDollar) ? s.qualityPerDollar.toLocaleString() : '∞'}</td>
+                  <td className="num">{Number.isFinite(s.qualityPerDollar) ? s.qualityPerDollar.toLocaleString('en-US') : '∞'}</td>
                 </tr>
               ))}
             </tbody>

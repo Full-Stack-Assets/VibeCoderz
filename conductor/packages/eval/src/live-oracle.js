@@ -12,7 +12,7 @@
  * the strategies, dataset, and report are unchanged — only the oracle differs.
  */
 
-import { complete, gatewayConfig } from '../../coo-engine/src/index.js';
+import { complete, gatewayConfig } from '@conductor/coo-engine';
 
 const DEFAULT_JUDGE = 'anthropic/claude-opus-4.6';
 

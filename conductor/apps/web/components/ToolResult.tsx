@@ -30,7 +30,7 @@ export function Citations({ query, results }: { query?: string; results: Citatio
             </>
           )
           return (
-            <li key={i} className="citation">
+            <li key={r.url || i} className="citation">
               {r.url ? (
                 <a href={r.url} target="_blank" rel="noopener noreferrer" className="citation-link">
                   {card}

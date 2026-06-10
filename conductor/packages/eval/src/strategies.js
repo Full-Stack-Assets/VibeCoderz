@@ -9,7 +9,7 @@
  * model per task) to show how close COO gets to the best achievable quality.
  */
 
-import { routeTurn, getModel, MODEL_CATALOG } from '../../coo-engine/src/index.js';
+import { routeTurn, MODEL_CATALOG } from '@conductor/coo-engine';
 
 // Roomy budget so the eval measures routing choices, not the budget throttle
 // (cost is accounted separately in run.js).
@@ -31,10 +31,24 @@ export function alwaysStrategy(modelId) {
   return () => modelId;
 }
 
-/** Upper bound: always the model with the highest oracle quality for the task. */
+/**
+ * Upper bound: always the model with the highest oracle quality for the task.
+ * The oracle's `quality` may be async (the live LLM-judge), so await each call
+ * and compare scalars — a synchronous reduce would compare unresolved Promises.
+ */
 export function qualityOracleStrategy(oracle) {
-  return (task) =>
-    MODEL_CATALOG.reduce((best, m) => (oracle.quality(m, task) > oracle.quality(best, task) ? m : best)).id;
+  return async (task) => {
+    let bestModel = MODEL_CATALOG[0];
+    let bestQ = await oracle.quality(bestModel, task);
+    for (const m of MODEL_CATALOG.slice(1)) {
+      const q = await oracle.quality(m, task);
+      if (q > bestQ) {
+        bestQ = q;
+        bestModel = m;
+      }
+    }
+    return bestModel.id;
+  };
 }
 
 // Conventional baseline picks from the catalog.
@@ -52,5 +66,3 @@ export function defaultStrategies(oracle) {
     'Quality-Oracle (upper bound)': qualityOracleStrategy(oracle),
   };
 }
-
-export { getModel };
