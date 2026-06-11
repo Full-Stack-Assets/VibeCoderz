@@ -9,6 +9,14 @@ import type { Msg } from './types'
 
 const KEY = 'conductor.conversations.v1'
 
+// Conversations are scoped per signed-in account so different users on the same
+// device don't see each other's history. Chat sets this on mount.
+let namespace = ''
+export function setHistoryNamespace(userId: string | null) {
+  namespace = userId ? `.${userId}` : ''
+}
+const storageKey = () => KEY + namespace
+
 export interface StoredConversation {
   id: string
   title: string
@@ -20,7 +28,7 @@ export interface StoredConversation {
 function read(): StoredConversation[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = window.localStorage.getItem(KEY)
+    const raw = window.localStorage.getItem(storageKey())
     return raw ? (JSON.parse(raw) as StoredConversation[]) : []
   } catch {
     return []
@@ -29,7 +37,7 @@ function read(): StoredConversation[] {
 
 function write(list: StoredConversation[]) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 100)))
+    window.localStorage.setItem(storageKey(), JSON.stringify(list.slice(0, 100)))
   } catch {
     /* quota / private mode — ignore */
   }

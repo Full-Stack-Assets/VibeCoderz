@@ -13,10 +13,14 @@ import {
   deleteConversation,
   renameConversation,
   conversationToMarkdown,
+  setHistoryNamespace,
   titleFrom,
   type StoredConversation,
 } from '@/lib/history'
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
+import { useAuth } from './auth/AuthContext'
+import { Pricing } from './auth/Pricing'
+import { planById, type PlanId } from '@/lib/auth'
 
 const SUGGESTIONS = [
   'Search the web for the latest on the EU AI Act and cite sources',
@@ -48,6 +52,11 @@ interface AuditItem {
 }
 
 export function Chat() {
+  const { user, signOut, setPlan } = useAuth()
+  // Scope conversation history to this account before any read/write below.
+  setHistoryNamespace(user?.id ?? null)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -427,6 +436,51 @@ export function Chat() {
           >
             <SlidersIcon />
           </button>
+          <div className="account">
+            <button
+              className="avatar-btn"
+              onClick={() => setAccountOpen((o) => !o)}
+              title={user?.email}
+              aria-label="Account"
+            >
+              {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
+            </button>
+            {accountOpen && (
+              <>
+                <div className="account-scrim" onClick={() => setAccountOpen(false)} />
+                <div className="account-menu">
+                  <div className="account-head">
+                    <div className="account-avatar">
+                      {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="account-id">
+                      {user?.name && <div className="account-name">{user.name}</div>}
+                      <div className="account-email">{user?.email}</div>
+                    </div>
+                    <span className="plan-pill">{planById(user?.plan).name}</span>
+                  </div>
+                  <button
+                    className="account-item"
+                    onClick={() => {
+                      setAccountOpen(false)
+                      setPlanOpen(true)
+                    }}
+                  >
+                    Manage plan
+                  </button>
+                  <button
+                    className="account-item danger"
+                    onClick={async () => {
+                      setAccountOpen(false)
+                      await signOut()
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className={`shell ${panelOpen ? 'panel-open' : ''}`}>
@@ -552,6 +606,18 @@ export function Chat() {
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
         </div>
       </div>
+
+      {planOpen && (
+        <Pricing
+          mode="manage"
+          currentPlan={user?.plan}
+          onChoose={async (p: PlanId) => {
+            await setPlan(p)
+            setPlanOpen(false)
+          }}
+          onClose={() => setPlanOpen(false)}
+        />
+      )}
     </div>
   )
 }
