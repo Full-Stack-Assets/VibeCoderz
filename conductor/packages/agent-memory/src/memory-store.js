@@ -16,6 +16,68 @@ export class InMemoryStore {
     this.messages = new Map(); // conversationId -> Message[]
     this.tools = new Map(); // conversationId -> ToolExecution[]
     this.owned = new Map(); // id -> { id, ownerId, title, updatedAt, snapshot }
+    this.users = new Map(); // id -> User
+    this.usersByEmail = new Map(); // lowercased email -> id
+    this.sessions = new Map(); // token -> { token, userId, expiresAt }
+  }
+
+  // --- Accounts & sessions (email + password auth) ------------------------
+
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+    const key = String(email).trim().toLowerCase();
+    if (this.usersByEmail.has(key)) throw new Error('An account with that email already exists.');
+    const user = {
+      id: nextId('user'),
+      email: String(email).trim(),
+      name: name || null,
+      passwordHash,
+      plan,
+      role,
+      stripeCustomerId: null,
+      subscriptionStatus: null,
+      createdAt: Date.now(),
+    };
+    this.users.set(user.id, user);
+    this.usersByEmail.set(key, user.id);
+    return user;
+  }
+
+  async getUserByEmail(email) {
+    const id = this.usersByEmail.get(String(email).trim().toLowerCase());
+    return id ? this.users.get(id) : null;
+  }
+
+  async getUserById(id) {
+    return this.users.get(id) || null;
+  }
+
+  async updateUser(id, patch) {
+    const user = this.users.get(id);
+    if (!user) return null;
+    Object.assign(user, patch);
+    return user;
+  }
+
+  async createSession(userId, token, expiresAt) {
+    const session = { token, userId, expiresAt };
+    this.sessions.set(token, session);
+    return session;
+  }
+
+  async getSession(token) {
+    const session = this.sessions.get(token);
+    if (!session) return null;
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      this.sessions.delete(token);
+      return null;
+    }
+    const user = this.users.get(session.userId);
+    if (!user) return null;
+    return { session, user };
+  }
+
+  async deleteSession(token) {
+    return this.sessions.delete(token);
   }
 
   // --- Per-account conversation snapshots ---------------------------------

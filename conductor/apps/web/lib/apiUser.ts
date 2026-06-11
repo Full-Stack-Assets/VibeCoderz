@@ -1,16 +1,5 @@
-/**
- * Resolve the owning account for a conversation API request.
- *
- * DEMO-GRADE: identity is asserted by the client via the `x-user-id` header,
- * matching the app's client-side auth (lib/auth.ts). A production deployment
- * would instead verify a signed session cookie / bearer token here and derive
- * the id server-side — the route handlers don't change, only this function.
- */
-export function ownerId(req: Request): string | null {
-  const id = req.headers.get('x-user-id')
-  return id && id.trim() ? id.trim() : null
-}
-
+// Conversation snapshot store shape (owner-scoped). Ownership is resolved from
+// the session cookie in the route handlers — see lib/server/session.ts.
 export interface ConversationStore {
   upsertConversation(input: {
     id: string

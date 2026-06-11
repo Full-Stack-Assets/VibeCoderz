@@ -27,7 +27,7 @@ import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
-import { planById, type PlanId } from '@/lib/auth'
+import { planById } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const SUGGESTIONS = [
@@ -66,7 +66,7 @@ interface AuditItem {
 }
 
 export function Chat() {
-  const { user, signOut, setPlan } = useAuth()
+  const { user, logout } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
   // Stable handle to the current account id for fire-and-forget cloud sync.
@@ -124,7 +124,7 @@ export function Chat() {
     const uid = user?.id
     if (!uid) return
     let alive = true
-    pullServerConversations(uid).then((remote) => {
+    pullServerConversations().then((remote) => {
       if (!alive || remote.length === 0) return
       const local = new Map(listConversations().map((c) => [c.id, c.updatedAt ?? 0]))
       let changed = false
@@ -191,8 +191,7 @@ export function Chat() {
     const conv: StoredConversation = { id, title: titleFrom(msgs), updatedAt: Date.now(), spentUSD, messages: msgs }
     saveConversation(conv)
     setConversations(listConversations())
-    const uid = userIdRef.current
-    if (uid) void pushServerConversation(uid, conv)
+    if (userIdRef.current) void pushServerConversation(conv)
   }, [])
 
   const patch = (id: string, fn: (m: Msg) => Msg) =>
@@ -447,13 +446,13 @@ export function Chat() {
     deleteConversation(id)
     setConversations(listConversations())
     if (id === currentId) newChat()
-    if (userIdRef.current) void deleteServerConversation(userIdRef.current, id)
+    if (userIdRef.current) void deleteServerConversation(id)
   }
 
   const renameConv = (id: string, title: string) => {
     renameConversation(id, title)
     setConversations(listConversations())
-    if (userIdRef.current) void renameServerConversation(userIdRef.current, id, title.trim().slice(0, 80))
+    if (userIdRef.current) void renameServerConversation(id, title.trim().slice(0, 80))
   }
 
   const exportConv = (id: string) => {
@@ -588,7 +587,7 @@ export function Chat() {
                     className="account-item danger"
                     onClick={async () => {
                       setAccountOpen(false)
-                      await signOut()
+                      await logout()
                     }}
                   >
                     Sign out
@@ -723,17 +722,7 @@ export function Chat() {
         </div>
       </div>
 
-      {planOpen && (
-        <Pricing
-          mode="manage"
-          currentPlan={user?.plan}
-          onChoose={async (p: PlanId) => {
-            await setPlan(p)
-            setPlanOpen(false)
-          }}
-          onClose={() => setPlanOpen(false)}
-        />
-      )}
+      {planOpen && <Pricing mode="manage" onClose={() => setPlanOpen(false)} />}
     </div>
   )
 }

@@ -3,42 +3,77 @@
 import { useRef, useState } from 'react'
 import { PLANS, type PlanId } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
+import { useAuth } from './AuthContext'
 
 export function Pricing({
   mode,
-  currentPlan,
-  onChoose,
   onClose,
+  onDone,
 }: {
   mode: 'onboarding' | 'manage'
-  currentPlan?: PlanId
-  onChoose: (plan: PlanId) => Promise<void> | void
   onClose?: () => void
+  onDone?: () => void
 }) {
-  const [selected, setSelected] = useState<PlanId>(currentPlan ?? 'free')
+  const { user, billing, startCheckout, openPortal } = useAuth()
+  const currentPlan: PlanId = user?.plan ?? 'free'
+  const hasSubscription = !!user?.subscriptionStatus && user.subscriptionStatus !== 'canceled'
+
+  const [selected, setSelected] = useState<PlanId>(currentPlan)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
-  // Trap focus only when shown as a modal overlay (manage); onboarding is a page.
   useFocusTrap(ref, mode === 'manage', onClose)
 
+  const planEnabled = (id: PlanId) => id === 'free' || (billing.enabled && billing.plans[id as 'pro' | 'max'])
+
   const confirm = async () => {
+    setError(null)
+    if (selected === currentPlan) {
+      onDone?.()
+      onClose?.()
+      return
+    }
+    if (selected === 'free') {
+      // Downgrade: send paying users to the portal to cancel; others are done.
+      if (hasSubscription) {
+        setBusy(true)
+        try {
+          window.location.href = await openPortal()
+        } catch (e) {
+          setError((e as Error).message)
+          setBusy(false)
+        }
+      } else {
+        onDone?.()
+        onClose?.()
+      }
+      return
+    }
+    // Paid plan → Stripe Checkout.
+    if (!planEnabled(selected)) {
+      setError('Billing isn’t configured for this plan yet. Set the Stripe keys to enable it.')
+      return
+    }
     setBusy(true)
     try {
-      await onChoose(selected)
-    } finally {
+      window.location.href = await startCheckout(selected)
+    } catch (e) {
+      setError((e as Error).message)
       setBusy(false)
     }
   }
 
   const selectedName = PLANS.find((p) => p.id === selected)?.name
   const cta =
-    mode === 'onboarding'
-      ? selected === 'free'
-        ? 'Start with Free'
-        : `Continue with ${selectedName}`
-      : currentPlan === selected
-        ? 'Keep current plan'
-        : `Switch to ${selectedName}`
+    selected === currentPlan
+      ? mode === 'onboarding'
+        ? `Continue with ${selectedName}`
+        : 'Keep current plan'
+      : selected === 'free'
+        ? hasSubscription
+          ? 'Cancel subscription'
+          : 'Switch to Free'
+        : `Subscribe to ${selectedName}`
 
   return (
     <div
@@ -54,8 +89,15 @@ export function Pricing({
         <p className="pricing-sub">
           {mode === 'onboarding'
             ? 'Start free — upgrade anytime. The router keeps every plan cost-efficient.'
-            : 'Switch anytime. Changes apply to your routing budget immediately.'}
+            : 'Switch anytime. Paid plans are billed securely through Stripe.'}
         </p>
+
+        {!billing.enabled && (
+          <p className="pricing-notice">
+            Live billing isn’t configured in this environment yet — Free works fully; paid plans need
+            the Stripe keys set.
+          </p>
+        )}
 
         <div className="pricing-grid">
           {PLANS.map((plan) => {
@@ -90,17 +132,36 @@ export function Pricing({
           })}
         </div>
 
+        {error && <p className="auth-error">{error}</p>}
+
         <div className="pricing-actions">
           <button className="auth-primary" onClick={confirm} disabled={busy}>
-            {busy ? 'Saving…' : cta}
+            {busy ? 'Redirecting…' : cta}
           </button>
+          {mode === 'manage' && hasSubscription && selected === currentPlan && (
+            <button
+              className="auth-secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  window.location.href = await openPortal()
+                } catch (e) {
+                  setError((e as Error).message)
+                  setBusy(false)
+                }
+              }}
+            >
+              Manage billing in Stripe
+            </button>
+          )}
           {mode === 'manage' && onClose && (
             <button className="auth-back" onClick={onClose}>
               Close
             </button>
           )}
         </div>
-        <p className="auth-fine">Demo pricing — no charge is made. Wire to Stripe for real billing.</p>
       </div>
     </div>
   )

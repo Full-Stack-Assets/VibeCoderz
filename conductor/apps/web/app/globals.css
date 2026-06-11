@@ -1217,3 +1217,15 @@ button.model-pill.pinned { border-color: var(--coral); color: var(--coral-press)
     scroll-behavior: auto !important;
   }
 }
+
+/* Billing not-configured notice on the pricing screen */
+.pricing-notice {
+  font-size: 13.5px;
+  color: var(--coral-press);
+  background: var(--coral-tint);
+  border: 1px solid var(--coral);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  line-height: 1.5;
+}

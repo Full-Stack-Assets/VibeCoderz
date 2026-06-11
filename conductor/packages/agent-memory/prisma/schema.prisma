@@ -51,3 +51,28 @@ model ToolExecution {
 
   @@index([conversationId, createdAt])
 }
+
+// --- Accounts & sessions (email + password auth) ---------------------------
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  passwordHash       String
+  plan               String    @default("free") // 'free' | 'pro' | 'max'
+  role               String    @default("user") // 'user' | 'admin'
+  stripeCustomerId   String?
+  subscriptionStatus String? // Stripe subscription status, e.g. 'active'
+  createdAt          DateTime  @default(now())
+  sessions           Session[]
+}
+
+model Session {
+  token     String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

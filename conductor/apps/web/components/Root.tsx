@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthProviderComponent, useAuth } from './auth/AuthContext'
 import { AuthFlow } from './auth/AuthFlow'
 import { Pricing } from './auth/Pricing'
@@ -17,8 +17,18 @@ export function Root() {
 }
 
 function Gate() {
-  const { loading, user, setPlan } = useAuth()
+  const { loading, user, refresh } = useAuth()
   const [onboarding, setOnboarding] = useState(false)
+
+  // Returning from Stripe Checkout: refresh the account (plan may have changed
+  // via webhook) and clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('checkout')) {
+      void refresh()
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [refresh])
 
   if (loading) {
     return (
@@ -30,17 +40,6 @@ function Gate() {
     )
   }
   if (!user) return <AuthFlow onAuthenticated={(isNewUser) => setOnboarding(isNewUser)} />
-  if (onboarding) {
-    return (
-      <Pricing
-        mode="onboarding"
-        currentPlan={user.plan}
-        onChoose={async (plan) => {
-          await setPlan(plan)
-          setOnboarding(false)
-        }}
-      />
-    )
-  }
+  if (onboarding) return <Pricing mode="onboarding" onDone={() => setOnboarding(false)} />
   return <Chat />
 }

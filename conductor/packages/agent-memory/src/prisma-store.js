@@ -106,4 +106,43 @@ export class PrismaStore {
     await this.db.conversation.delete({ where: { id } });
     return true;
   }
+
+  // --- Accounts & sessions ------------------------------------------------
+
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+    return this.db.user.create({
+      data: { email: String(email).trim(), name: name || null, passwordHash, plan, role },
+    });
+  }
+
+  async getUserByEmail(email) {
+    return this.db.user.findUnique({ where: { email: String(email).trim() } });
+  }
+
+  async getUserById(id) {
+    return this.db.user.findUnique({ where: { id } });
+  }
+
+  async updateUser(id, patch) {
+    return this.db.user.update({ where: { id }, data: patch });
+  }
+
+  async createSession(userId, token, expiresAt) {
+    return this.db.session.create({ data: { token, userId, expiresAt: new Date(expiresAt) } });
+  }
+
+  async getSession(token) {
+    const session = await this.db.session.findUnique({ where: { token }, include: { user: true } });
+    if (!session) return null;
+    if (session.expiresAt && Date.now() > session.expiresAt.getTime()) {
+      await this.db.session.delete({ where: { token } }).catch(() => {});
+      return null;
+    }
+    return { session, user: session.user };
+  }
+
+  async deleteSession(token) {
+    await this.db.session.delete({ where: { token } }).catch(() => {});
+    return true;
+  }
 }

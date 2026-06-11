@@ -5,16 +5,16 @@ import type { StoredConversation } from './history'
 /**
  * Best-effort cloud sync for conversation history. The app is offline-first:
  * localStorage stays the instant source of truth, and these helpers mirror it
- * to the per-account server store so history survives across sessions/devices
- * (durably when DATABASE_URL is configured; otherwise within a server instance).
- * Every call swallows errors — a sync failure never blocks the UI.
+ * to the signed-in account's server store (ownership resolved from the session
+ * cookie, sent automatically with same-origin fetches). Every call swallows
+ * errors — a sync failure never blocks the UI.
  */
 
-const auth = (userId: string) => ({ 'content-type': 'application/json', 'x-user-id': userId })
+const JSON_HEADERS = { 'content-type': 'application/json' }
 
-export async function pullServerConversations(userId: string): Promise<StoredConversation[]> {
+export async function pullServerConversations(): Promise<StoredConversation[]> {
   try {
-    const res = await fetch('/api/conversations', { headers: { 'x-user-id': userId } })
+    const res = await fetch('/api/conversations')
     if (!res.ok) return []
     const data = await res.json()
     return Array.isArray(data.conversations) ? (data.conversations as StoredConversation[]) : []
@@ -23,11 +23,11 @@ export async function pullServerConversations(userId: string): Promise<StoredCon
   }
 }
 
-export async function pushServerConversation(userId: string, conv: StoredConversation): Promise<void> {
+export async function pushServerConversation(conv: StoredConversation): Promise<void> {
   try {
     await fetch(`/api/conversations/${encodeURIComponent(conv.id)}`, {
       method: 'PUT',
-      headers: auth(userId),
+      headers: JSON_HEADERS,
       body: JSON.stringify(conv),
     })
   } catch {
@@ -35,22 +35,19 @@ export async function pushServerConversation(userId: string, conv: StoredConvers
   }
 }
 
-export async function deleteServerConversation(userId: string, id: string): Promise<void> {
+export async function deleteServerConversation(id: string): Promise<void> {
   try {
-    await fetch(`/api/conversations/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: { 'x-user-id': userId },
-    })
+    await fetch(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
   } catch {
     /* ignore */
   }
 }
 
-export async function renameServerConversation(userId: string, id: string, title: string): Promise<void> {
+export async function renameServerConversation(id: string, title: string): Promise<void> {
   try {
     await fetch(`/api/conversations/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: auth(userId),
+      headers: JSON_HEADERS,
       body: JSON.stringify({ title }),
     })
   } catch {
