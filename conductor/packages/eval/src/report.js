@@ -40,8 +40,14 @@ export function renderReport(result, { dataset } = {}) {
   }
   if (headline.vsCheapest) {
     const extra = headline.vsCheapest.extraCostPct;
+    const gain = headline.vsCheapest.qualityGainPct;
+    // Sign-aware: a negative delta is a quality *loss*, not "-X% higher".
+    const quality =
+      gain > 0 ? `${gain}% higher quality`
+        : gain < 0 ? `${Math.abs(gain)}% lower quality`
+        : 'the same quality';
     lines.push(
-      `- **vs Always-Cheapest (Grok):** ${headline.vsCheapest.qualityGainPct}% higher quality` +
+      `- **vs Always-Cheapest (Grok):** ${quality}` +
         (extra != null ? ` for ${extra}% more spend.` : '.')
     );
   }
@@ -92,13 +98,24 @@ export function renderReport(result, { dataset } = {}) {
   lines.push(
     '- **Cost** uses `estimateTurnCostUSD` with the catalog pricing the product meters with.'
   );
-  lines.push(
-    '- **Quality** is currently the `synthetic` oracle: a transparent prior (capability vs ' +
-      'task difficulty, specialty match, vision capability), not a live measurement. It exists ' +
-      'so the harness runs deterministically in CI. Swap in the **LLM-judge** oracle ' +
-      '(`--live`, requires a gateway/provider key) to replace the prior with measured scores — ' +
-      'the strategies, dataset, and this report do not change.'
-  );
+  // The note must describe the oracle that ACTUALLY produced these numbers — a
+  // live LLM-judge run and the synthetic CI prior are different kinds of claim.
+  if (String(oracle).startsWith('synthetic')) {
+    lines.push(
+      '- **Quality** is the `synthetic` oracle: a transparent prior (capability vs ' +
+        'task difficulty, specialty match, vision capability), not a live measurement. It exists ' +
+        'so the harness runs deterministically in CI. Swap in the **LLM-judge** oracle ' +
+        '(`--live`, requires a gateway/provider key) to replace the prior with measured scores — ' +
+        'the strategies, dataset, and this report do not change.'
+    );
+  } else {
+    lines.push(
+      `- **Quality** is the \`${oracle}\` oracle: real model completions scored by an LLM judge ` +
+        'on a 0–100 rubric. These are point-in-time live measurements (real model outputs + ' +
+        'judge), not bit-for-bit reproducible. Run `pnpm eval` without `--live` to use the ' +
+        'deterministic `synthetic` prior in CI — the strategies, dataset, and this report do not change.'
+    );
+  }
   lines.push(
     '- Regenerate with `pnpm eval` (add `--write` to update this file).'
   );
