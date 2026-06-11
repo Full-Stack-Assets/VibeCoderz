@@ -107,6 +107,7 @@ export function Sidebar({
                   {c.title}
                 </span>
               )}
+              {c.spentUSD > 0 && <span className="conv-cost">${c.spentUSD.toFixed(4)}</span>}
               <div className="conv-actions">
                 <button
                   className="conv-act"

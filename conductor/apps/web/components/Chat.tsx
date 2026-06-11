@@ -27,6 +27,7 @@ import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
+import { ShortcutsHelp } from './ShortcutsHelp'
 import { planById } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
@@ -78,6 +79,8 @@ export function Chat() {
   const [preferModel, setPreferModel] = useState<string | null>(null)
   const [qualityFloor, setQualityFloor] = useState(0)
   const [models, setModels] = useState<CatalogModel[]>([])
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [budgetCap, setBudgetCap] = useState<number | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -269,6 +272,7 @@ export function Chat() {
           if (event === 'decision') {
             const d = data.decision as RouteDecision
             setDecision(d)
+            if (d.budget?.budgetUSD) setBudgetCap(d.budget.budgetUSD)
             patch(pendingId, (m) => ({ ...m, decision: d }))
             if (d.model) {
               setAudit((a) => [
@@ -422,6 +426,13 @@ export function Chat() {
       } else if (mod && k === 'b') {
         e.preventDefault()
         setSidebarOpen((s) => !s)
+      } else if (e.key === '?' && !mod && !e.altKey) {
+        const el = document.activeElement as HTMLElement | null
+        const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+        if (!typing) {
+          e.preventDefault()
+          setShortcutsOpen(true)
+        }
       } else if (e.key === 'Escape') {
         if (abortRef.current) abortRef.current.abort()
         else setSidebarOpen((s) => (s ? false : s))
@@ -473,6 +484,7 @@ export function Chat() {
     (preferModel && models.find((m) => m.id === preferModel)?.label) ||
     preferModel?.split('/').pop() ||
     ''
+  const budgetUtil = budgetCap ? spent / budgetCap : 0
 
   return (
     <div className="app">
@@ -708,6 +720,20 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              {budgetCap && (
+                <div className="composer-budget" title="Session budget — turns throttle near the cap">
+                  <div className="cb-bar">
+                    <div
+                      className={`cb-fill ${budgetUtil > 0.85 ? 'crit' : budgetUtil > 0.6 ? 'warn' : ''}`}
+                      style={{ width: `${Math.min(100, budgetUtil * 100)}%` }}
+                    />
+                  </div>
+                  <span className="cb-label">
+                    ${spent.toFixed(4)} / ${budgetCap.toFixed(2)}
+                    {budgetUtil >= 0.85 ? ' · near cap' : ''}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="composer-hint">
               Code · web research · data · images — routed by the COO engine, streamed live, simulated until a gateway key is set
@@ -723,6 +749,7 @@ export function Chat() {
       </div>
 
       {planOpen && <Pricing mode="manage" onClose={() => setPlanOpen(false)} />}
+      {shortcutsOpen && <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />}
     </div>
   )
 }

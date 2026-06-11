@@ -87,12 +87,14 @@ export function titleFrom(messages: Msg[]): string {
 /** Render a conversation as portable Markdown for export/download. */
 export function conversationToMarkdown(conv: StoredConversation): string {
   const lines: string[] = [`# ${conv.title}`, '']
+  if (conv.spentUSD > 0) lines.push(`_Total cost: $${conv.spentUSD.toFixed(5)}_`, '')
   for (const m of conv.messages) {
     if (m.role === 'user') {
       lines.push('**You:**', '', m.content || '_(attachment only)_', '')
     } else {
       const model = m.decision?.model?.label
-      lines.push(`**Conductor${model ? ` · ${model}` : ''}:**`, '', m.content || '', '')
+      const cost = m.costUSD ? ` · $${m.costUSD.toFixed(5)}` : ''
+      lines.push(`**Conductor${model ? ` · ${model}` : ''}${cost}:**`, '', m.content || '', '')
     }
   }
   return lines.join('\n').trim() + '\n'
