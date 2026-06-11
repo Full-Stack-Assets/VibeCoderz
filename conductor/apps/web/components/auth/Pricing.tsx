@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PLANS, type PlanId } from '@/lib/auth'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 
 export function Pricing({
   mode,
@@ -16,6 +17,9 @@ export function Pricing({
 }) {
   const [selected, setSelected] = useState<PlanId>(currentPlan ?? 'free')
   const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  // Trap focus only when shown as a modal overlay (manage); onboarding is a page.
+  useFocusTrap(ref, mode === 'manage', onClose)
 
   const confirm = async () => {
     setBusy(true)
@@ -37,7 +41,14 @@ export function Pricing({
         : `Switch to ${selectedName}`
 
   return (
-    <div className={mode === 'manage' ? 'pricing pricing-modal' : 'pricing'}>
+    <div
+      className={mode === 'manage' ? 'pricing pricing-modal' : 'pricing'}
+      ref={ref}
+      tabIndex={mode === 'manage' ? -1 : undefined}
+      role={mode === 'manage' ? 'dialog' : undefined}
+      aria-modal={mode === 'manage' ? true : undefined}
+      aria-label={mode === 'manage' ? 'Manage plan' : undefined}
+    >
       <div className="pricing-inner">
         <h1 className="pricing-title">{mode === 'onboarding' ? 'Choose your plan' : 'Your plan'}</h1>
         <p className="pricing-sub">

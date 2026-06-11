@@ -157,7 +157,8 @@ export function Message({
       <div className="avatar">
         <Burst size={22} />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* aria-live announces the reply as it streams in for screen readers. */}
+      <div style={{ flex: 1, minWidth: 0 }} aria-live="polite" aria-atomic="false" aria-busy={msg.pending}>
         {msg.pending ? (
           <div className="typing">
             <span />

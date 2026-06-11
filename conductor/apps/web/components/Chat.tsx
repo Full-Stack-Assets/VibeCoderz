@@ -20,7 +20,9 @@ import {
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
+import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { planById, type PlanId } from '@/lib/auth'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const SUGGESTIONS = [
   'Search the web for the latest on the EU AI Act and cite sources',
@@ -57,6 +59,10 @@ export function Chat() {
   setHistoryNamespace(user?.id ?? null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
+  const [routingOpen, setRoutingOpen] = useState(false)
+  const [preferModel, setPreferModel] = useState<string | null>(null)
+  const [qualityFloor, setQualityFloor] = useState(0)
+  const [models, setModels] = useState<CatalogModel[]>([])
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -73,6 +79,7 @@ export function Chat() {
   const [atBottom, setAtBottom] = useState(true)
 
   const convRef = useRef<HTMLDivElement>(null)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
   atBottomRef.current = atBottom
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -86,6 +93,16 @@ export function Chat() {
   const mounted = useRef(false)
 
   useEffect(() => setConversations(listConversations()), [])
+  useEffect(() => {
+    let alive = true
+    fetch('/api/models')
+      .then((r) => r.json())
+      .then((d) => alive && setModels(d.models ?? []))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   // Auto-scroll only when the user is already pinned to the bottom, so reading
   // back through a streaming reply doesn't yank them down.
   useEffect(() => {
@@ -101,6 +118,8 @@ export function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     setAtBottom(true)
   }
+
+  useFocusTrap(accountMenuRef, accountOpen, () => setAccountOpen(false))
 
   // Restore persisted theme + agent preference after mount (the inline script in
   // layout.tsx already applied the theme class pre-paint, so there's no flash).
@@ -194,6 +213,8 @@ export function Chat() {
             spentUSD: spent,
             conversationId: cid,
             agentic: agent,
+            preferModel: preferModel ?? undefined,
+            qualityFloor: qualityFloor || undefined,
           }),
         })
         if (!res.body) throw new Error('no response stream')
@@ -274,7 +295,7 @@ export function Chat() {
         setTimeout(() => persistLocal(cid, messagesRef.current, spentRef.current), 0)
       }
     },
-    [sending, currentId, spent, agent, persistLocal]
+    [sending, currentId, spent, agent, preferModel, qualityFloor, persistLocal]
   )
 
   const send = useCallback(
@@ -380,6 +401,10 @@ export function Chat() {
 
   const empty = messages.length === 0
   const routedLabel = decision?.model?.label
+  const pinnedLabel =
+    (preferModel && models.find((m) => m.id === preferModel)?.label) ||
+    preferModel?.split('/').pop() ||
+    ''
 
   return (
     <div className="app">
@@ -407,9 +432,31 @@ export function Chat() {
             <span className="name">Conductor</span>
           </div>
           <div className="spacer" />
-          <div className="model-pill" title="Model selected per-turn by the COO engine">
-            <span className="dot" />
-            {routedLabel ? routedLabel : 'Auto-routed'}
+          <div className="account">
+            <button
+              className={`model-pill ${preferModel || qualityFloor ? 'pinned' : ''}`}
+              onClick={() => setRoutingOpen((o) => !o)}
+              title="Routing controls — pin a model or set a quality floor"
+              aria-haspopup="dialog"
+              aria-expanded={routingOpen}
+            >
+              <span className="dot" />
+              {preferModel ? pinnedLabel : routedLabel ? routedLabel : 'Auto-routed'}
+              {preferModel && <span className="pin-mark">📌</span>}
+            </button>
+            {routingOpen && (
+              <RoutingControls
+                models={models}
+                preferModel={preferModel}
+                qualityFloor={qualityFloor}
+                routedLabel={routedLabel}
+                onChange={({ preferModel: pm, qualityFloor: qf }) => {
+                  setPreferModel(pm)
+                  setQualityFloor(qf)
+                }}
+                onClose={() => setRoutingOpen(false)}
+              />
+            )}
           </div>
           <a
             className="bench-link"
@@ -448,7 +495,7 @@ export function Chat() {
             {accountOpen && (
               <>
                 <div className="account-scrim" onClick={() => setAccountOpen(false)} />
-                <div className="account-menu">
+                <div className="account-menu" ref={accountMenuRef} role="dialog" aria-modal="true" aria-label="Account" tabIndex={-1}>
                   <div className="account-head">
                     <div className="account-avatar">
                       {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}

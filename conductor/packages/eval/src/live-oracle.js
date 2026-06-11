@@ -14,7 +14,7 @@
 
 import { complete, gatewayConfig } from '@conductor/coo-engine';
 
-const DEFAULT_JUDGE = 'anthropic/claude-opus-4.6';
+const DEFAULT_JUDGE = 'anthropic/claude-opus-4.8';
 
 /** True when live answers + judging are possible (a real key is configured). */
 export function canJudge(env = process.env) {
@@ -49,11 +49,11 @@ export function classifyTransportError(err) {
 
 /** Pick the cheapest model the current config can reach live for the probe. */
 function probeModelId(env = process.env) {
-  if (gatewayConfig(env)) return 'xai/grok-4.1-fast-reasoning'; // gateway reaches every model
-  if (env.XAI_API_KEY) return 'xai/grok-4.1-fast-reasoning';
-  if (env.OPENAI_API_KEY) return 'openai/gpt-5.3-codex';
+  if (gatewayConfig(env)) return 'xai/grok-4.3-fast-reasoning'; // gateway reaches every model
+  if (env.XAI_API_KEY) return 'xai/grok-4.3-fast-reasoning';
+  if (env.OPENAI_API_KEY) return 'openai/gpt-5.5-codex';
   if (env.ANTHROPIC_API_KEY) return 'anthropic/claude-sonnet-4.6';
-  return 'xai/grok-4.1-fast-reasoning';
+  return 'xai/grok-4.3-fast-reasoning';
 }
 
 /**
