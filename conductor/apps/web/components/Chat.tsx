@@ -11,10 +11,16 @@ import {
   loadConversation,
   saveConversation,
   deleteConversation,
+  renameConversation,
+  conversationToMarkdown,
+  setHistoryNamespace,
   titleFrom,
   type StoredConversation,
 } from '@/lib/history'
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
+import { useAuth } from './auth/AuthContext'
+import { Pricing } from './auth/Pricing'
+import { planById, type PlanId } from '@/lib/auth'
 
 const SUGGESTIONS = [
   'Search the web for the latest on the EU AI Act and cite sources',
@@ -46,6 +52,11 @@ interface AuditItem {
 }
 
 export function Chat() {
+  const { user, signOut, setPlan } = useAuth()
+  // Scope conversation history to this account before any read/write below.
+  setHistoryNamespace(user?.id ?? null)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -59,7 +70,11 @@ export function Chat() {
   const [conversations, setConversations] = useState<StoredConversation[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [atBottom, setAtBottom] = useState(true)
 
+  const convRef = useRef<HTMLDivElement>(null)
+  const atBottomRef = useRef(true)
+  atBottomRef.current = atBottom
   const bottomRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -71,9 +86,21 @@ export function Chat() {
   const mounted = useRef(false)
 
   useEffect(() => setConversations(listConversations()), [])
+  // Auto-scroll only when the user is already pinned to the bottom, so reading
+  // back through a streaming reply doesn't yank them down.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const onConvScroll = () => {
+    const el = convRef.current
+    if (!el) return
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120)
+  }
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setAtBottom(true)
+  }
 
   // Restore persisted theme + agent preference after mount (the inline script in
   // layout.tsx already applied the theme class pre-paint, so there's no flash).
@@ -139,23 +166,20 @@ export function Chat() {
 
   const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id))
 
-  const send = useCallback(
-    async (text: string) => {
-      const content = text.trim()
-      const atts = attachments
-      if ((!content && atts.length === 0) || sending) return
+  // Stream one turn for a given message history (ending in a user turn). Shared
+  // by send, regenerate, and edit-and-resend.
+  const runTurn = useCallback(
+    async (history: Msg[]) => {
+      if (sending) return
+      const last = history[history.length - 1]
+      if (!last || last.role !== 'user') return
       setSending(true)
 
       const cid = currentId ?? convId()
       if (!currentId) setCurrentId(cid)
 
-      const userMsg: Msg = { id: mkId(), role: 'user', content, attachments: atts.length ? atts : undefined }
       const pendingId = mkId()
-      const history = [...messagesRef.current, userMsg]
       setMessages([...history, { id: pendingId, role: 'assistant', content: '', pending: true }])
-      setInput('')
-      setAttachments([])
-      requestAnimationFrame(autosize)
 
       const ac = new AbortController()
       abortRef.current = ac
@@ -177,7 +201,6 @@ export function Chat() {
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
-        let started = false
 
         const handle = (event: string, data: Record<string, unknown>) => {
           if (event === 'decision') {
@@ -201,7 +224,6 @@ export function Chat() {
             const step = data.step as ToolStep
             patch(pendingId, (m) => ({ ...m, pending: false, steps: [...(m.steps || []), step] }))
           } else if (event === 'text') {
-            started = true
             patch(pendingId, (m) => ({ ...m, pending: false, content: m.content + String(data.delta ?? '') }))
           } else if (event === 'done') {
             patch(pendingId, (m) => ({
@@ -212,9 +234,8 @@ export function Chat() {
             }))
             setSpent(data.spentUSD as number)
           } else if (event === 'error') {
-            patch(pendingId, (m) => ({ ...m, pending: false, content: `⚠️ ${data.error}` }))
+            patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
           }
-          void started
         }
 
         // SSE parse loop.
@@ -231,12 +252,18 @@ export function Chat() {
               if (line.startsWith('event:')) event = line.slice(6).trim()
               else if (line.startsWith('data:')) dataStr += line.slice(5).trim()
             }
-            if (dataStr) handle(event, JSON.parse(dataStr))
+            if (dataStr) {
+              try {
+                handle(event, JSON.parse(dataStr))
+              } catch {
+                /* skip a malformed frame rather than aborting the stream */
+              }
+            }
           }
         }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-          patch(pendingId, (m) => ({ ...m, pending: false, content: m.content || `⚠️ ${(err as Error).message}` }))
+          patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: m.content || `⚠️ ${(err as Error).message}` }))
         } else {
           patch(pendingId, (m) => ({ ...m, pending: false, content: m.content + ' ⏹' }))
         }
@@ -247,7 +274,50 @@ export function Chat() {
         setTimeout(() => persistLocal(cid, messagesRef.current, spentRef.current), 0)
       }
     },
-    [sending, currentId, spent, agent, attachments, persistLocal]
+    [sending, currentId, spent, agent, persistLocal]
+  )
+
+  const send = useCallback(
+    async (text: string) => {
+      const content = text.trim()
+      const atts = attachments
+      if ((!content && atts.length === 0) || sending) return
+      const userMsg: Msg = { id: mkId(), role: 'user', content, attachments: atts.length ? atts : undefined }
+      const history = [...messagesRef.current, userMsg]
+      setInput('')
+      setAttachments([])
+      requestAnimationFrame(autosize)
+      await runTurn(history)
+    },
+    [attachments, sending, runTurn]
+  )
+
+  // Re-run the most recent user turn, replacing the assistant reply.
+  const regenerate = useCallback(async () => {
+    if (sending) return
+    const msgs = messagesRef.current
+    let idx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        idx = i
+        break
+      }
+    }
+    if (idx < 0) return
+    await runTurn(msgs.slice(0, idx + 1))
+  }, [sending, runTurn])
+
+  // Edit a user message and resend from that point (drops everything after it).
+  const editResend = useCallback(
+    async (id: string, newContent: string) => {
+      if (sending) return
+      const msgs = messagesRef.current
+      const idx = msgs.findIndex((m) => m.id === id)
+      if (idx < 0 || msgs[idx].role !== 'user') return
+      const edited: Msg = { ...msgs[idx], content: newContent.trim() }
+      await runTurn([...msgs.slice(0, idx), edited])
+    },
+    [sending, runTurn]
   )
 
   // Persist whenever spend updates post-turn (captures final cost).
@@ -291,6 +361,23 @@ export function Chat() {
     if (id === currentId) newChat()
   }
 
+  const renameConv = (id: string, title: string) => {
+    renameConversation(id, title)
+    setConversations(listConversations())
+  }
+
+  const exportConv = (id: string) => {
+    const conv = loadConversation(id)
+    if (!conv) return
+    const blob = new Blob([conversationToMarkdown(conv)], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${conv.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 40) || 'conversation'}.md`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
   const empty = messages.length === 0
   const routedLabel = decision?.model?.label
 
@@ -303,6 +390,8 @@ export function Chat() {
         onNew={newChat}
         onSelect={selectConversation}
         onDelete={removeConversation}
+        onRename={renameConv}
+        onExport={exportConv}
         onClose={() => setSidebarOpen(false)}
       />
 
@@ -347,10 +436,55 @@ export function Chat() {
           >
             <SlidersIcon />
           </button>
+          <div className="account">
+            <button
+              className="avatar-btn"
+              onClick={() => setAccountOpen((o) => !o)}
+              title={user?.email}
+              aria-label="Account"
+            >
+              {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
+            </button>
+            {accountOpen && (
+              <>
+                <div className="account-scrim" onClick={() => setAccountOpen(false)} />
+                <div className="account-menu">
+                  <div className="account-head">
+                    <div className="account-avatar">
+                      {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="account-id">
+                      {user?.name && <div className="account-name">{user.name}</div>}
+                      <div className="account-email">{user?.email}</div>
+                    </div>
+                    <span className="plan-pill">{planById(user?.plan).name}</span>
+                  </div>
+                  <button
+                    className="account-item"
+                    onClick={() => {
+                      setAccountOpen(false)
+                      setPlanOpen(true)
+                    }}
+                  >
+                    Manage plan
+                  </button>
+                  <button
+                    className="account-item danger"
+                    onClick={async () => {
+                      setAccountOpen(false)
+                      await signOut()
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className={`shell ${panelOpen ? 'panel-open' : ''}`}>
-          <div className="conversation">
+          <div className="conversation" ref={convRef} onScroll={onConvScroll}>
             {empty ? (
               <div className="greeting">
                 <span className="burst-lg">
@@ -372,14 +506,29 @@ export function Chat() {
               </div>
             ) : (
               <div className="thread">
-                {messages.map((m) => (
-                  <Message key={m.id} msg={m} onInspect={() => setPanelOpen(true)} />
+                {messages.map((m, i) => (
+                  <Message
+                    key={m.id}
+                    msg={m}
+                    onInspect={() => setPanelOpen(true)}
+                    onEdit={m.role === 'user' && !sending ? editResend : undefined}
+                    onRegenerate={
+                      m.role === 'assistant' && i === messages.length - 1 && !sending && !m.pending
+                        ? regenerate
+                        : undefined
+                    }
+                  />
                 ))}
                 <div ref={bottomRef} />
               </div>
             )}
 
             <div className="composer-wrap">
+              {!empty && !atBottom && (
+                <button className="scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to bottom" title="Scroll to bottom">
+                  <ArrowDownIcon />
+                </button>
+              )}
               {attachments.length > 0 && (
                 <div className="attach-row">
                   {attachments.map((a) => (
@@ -457,6 +606,18 @@ export function Chat() {
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
         </div>
       </div>
+
+      {planOpen && (
+        <Pricing
+          mode="manage"
+          currentPlan={user?.plan}
+          onChoose={async (p: PlanId) => {
+            await setPlan(p)
+            setPlanOpen(false)
+          }}
+          onClose={() => setPlanOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -470,6 +631,11 @@ const ArrowUpIcon = () => (
 const StopIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
     <rect x="6" y="6" width="12" height="12" rx="2.5" />
+  </svg>
+)
+const ArrowDownIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14M5 12l7 7 7-7" />
   </svg>
 )
 const PaperclipIcon = () => (
