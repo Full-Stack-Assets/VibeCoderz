@@ -1207,3 +1207,13 @@ button.model-pill.pinned { border-color: var(--coral); color: var(--coral-press)
 /* Inline retry on errored turns */
 .msg-action.retry { color: var(--coral-press); font-weight: 700; }
 .msg-action.retry:hover { background: var(--coral-tint); }
+
+/* ---- Respect reduced-motion preferences --------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

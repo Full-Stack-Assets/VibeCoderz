@@ -50,6 +50,12 @@ function greetingText() {
 let idc = 0
 const mkId = () => `m${Date.now()}_${idc++}`
 const convId = () => `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+// Honor reduced-motion for programmatic scrolls (scrollIntoView ignores the CSS
+// scroll-behavior override, so we pick the behavior explicitly).
+const scrollBehavior = (): ScrollBehavior =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth'
 
 interface AuditItem {
   time: string
@@ -139,7 +145,7 @@ export function Chat() {
   // Auto-scroll only when the user is already pinned to the bottom, so reading
   // back through a streaming reply doesn't yank them down.
   useEffect(() => {
-    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() })
   }, [messages])
 
   const onConvScroll = () => {
@@ -148,7 +154,7 @@ export function Chat() {
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120)
   }
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() })
     setAtBottom(true)
   }
 
