@@ -1,3 +1,6 @@
 packages:
   - 'apps/*'
+  # The Expo/React Native app manages its own npm node_modules; keep it out of
+  # the pnpm workspace so Metro doesn't trip over hoisted/symlinked deps.
+  - '!apps/ios'
   - 'packages/*'
