@@ -14,10 +14,16 @@ export const viewport: Viewport = {
   maximumScale: 1,
 }
 
+// Applied before paint so the persisted (or system) theme never flashes.
+const themeInit = `(function(){try{var t=localStorage.getItem('conductor-theme');var d=t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;var e=document.documentElement;if(d)e.classList.add('dark');e.style.colorScheme=d?'dark':'light';}catch(e){}})();`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        {children}
+      </body>
     </html>
   )
 }
