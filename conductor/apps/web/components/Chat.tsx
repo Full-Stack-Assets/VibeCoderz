@@ -17,6 +17,12 @@ import {
   titleFrom,
   type StoredConversation,
 } from '@/lib/history'
+import {
+  pullServerConversations,
+  pushServerConversation,
+  deleteServerConversation,
+  renameServerConversation,
+} from '@/lib/historyServer'
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
@@ -57,6 +63,9 @@ export function Chat() {
   const { user, signOut, setPlan } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
+  // Stable handle to the current account id for fire-and-forget cloud sync.
+  const userIdRef = useRef<string | null>(null)
+  userIdRef.current = user?.id ?? null
   const [accountOpen, setAccountOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [routingOpen, setRoutingOpen] = useState(false)
@@ -103,6 +112,30 @@ export function Chat() {
       alive = false
     }
   }, [])
+  // On sign-in, pull this account's cloud history and merge it into the local
+  // cache (server wins only when strictly newer), then refresh the list.
+  useEffect(() => {
+    const uid = user?.id
+    if (!uid) return
+    let alive = true
+    pullServerConversations(uid).then((remote) => {
+      if (!alive || remote.length === 0) return
+      const local = new Map(listConversations().map((c) => [c.id, c.updatedAt ?? 0]))
+      let changed = false
+      for (const rc of remote) {
+        if (!rc?.id) continue
+        if (!local.has(rc.id) || (rc.updatedAt ?? 0) > (local.get(rc.id) ?? 0)) {
+          saveConversation(rc)
+          changed = true
+        }
+      }
+      if (changed) setConversations(listConversations())
+    })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
   // Auto-scroll only when the user is already pinned to the bottom, so reading
   // back through a streaming reply doesn't yank them down.
   useEffect(() => {
@@ -146,10 +179,14 @@ export function Chat() {
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
   }
 
-  // Persist the current conversation to localStorage and refresh the list.
+  // Persist the current conversation to localStorage (instant) and mirror it to
+  // the per-account cloud store (best-effort) so it survives across sessions.
   const persistLocal = useCallback((id: string, msgs: Msg[], spentUSD: number) => {
-    saveConversation({ id, title: titleFrom(msgs), updatedAt: Date.now(), spentUSD, messages: msgs })
+    const conv: StoredConversation = { id, title: titleFrom(msgs), updatedAt: Date.now(), spentUSD, messages: msgs }
+    saveConversation(conv)
     setConversations(listConversations())
+    const uid = userIdRef.current
+    if (uid) void pushServerConversation(uid, conv)
   }, [])
 
   const patch = (id: string, fn: (m: Msg) => Msg) =>
@@ -380,11 +417,13 @@ export function Chat() {
     deleteConversation(id)
     setConversations(listConversations())
     if (id === currentId) newChat()
+    if (userIdRef.current) void deleteServerConversation(userIdRef.current, id)
   }
 
   const renameConv = (id: string, title: string) => {
     renameConversation(id, title)
     setConversations(listConversations())
+    if (userIdRef.current) void renameServerConversation(userIdRef.current, id, title.trim().slice(0, 80))
   }
 
   const exportConv = (id: string) => {

@@ -54,4 +54,56 @@ export class PrismaStore {
       orderBy: { createdAt: 'asc' },
     });
   }
+
+  // --- Per-account conversation snapshots ---------------------------------
+
+  async upsertConversation({ id, ownerId, title, updatedAt, snapshot }) {
+    if (!id || !ownerId) throw new Error('id and ownerId are required');
+    const data = {
+      ownerId,
+      title: title || 'New conversation',
+      updatedAt: new Date(updatedAt || Date.now()),
+      snapshot: snapshot ?? null,
+    };
+    return this.db.conversation.upsert({
+      where: { id },
+      create: { id, ...data },
+      update: data,
+    });
+  }
+
+  async listConversations(ownerId) {
+    const rows = await this.db.conversation.findMany({
+      where: { ownerId },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, title: true, updatedAt: true },
+    });
+    return rows.map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt.getTime() }));
+  }
+
+  async getConversation(id, ownerId) {
+    const rec = await this.db.conversation.findUnique({ where: { id } });
+    if (!rec || rec.ownerId !== ownerId) return null;
+    return { ...rec, updatedAt: rec.updatedAt.getTime() };
+  }
+
+  async renameConversation(id, ownerId, title) {
+    const rec = await this.db.conversation.findUnique({ where: { id } });
+    if (!rec || rec.ownerId !== ownerId) return false;
+    const now = new Date();
+    // Keep the client snapshot's title/updatedAt in sync with the record.
+    const snapshot =
+      rec.snapshot && typeof rec.snapshot === 'object'
+        ? { ...rec.snapshot, title, updatedAt: now.getTime() }
+        : rec.snapshot;
+    await this.db.conversation.update({ where: { id }, data: { title, updatedAt: now, snapshot } });
+    return true;
+  }
+
+  async deleteConversation(id, ownerId) {
+    const rec = await this.db.conversation.findUnique({ where: { id } });
+    if (!rec || rec.ownerId !== ownerId) return false;
+    await this.db.conversation.delete({ where: { id } });
+    return true;
+  }
 }

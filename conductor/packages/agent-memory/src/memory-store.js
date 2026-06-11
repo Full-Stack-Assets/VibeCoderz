@@ -15,6 +15,58 @@ export class InMemoryStore {
     this.conversations = new Map(); // id -> { id, title, createdAt }
     this.messages = new Map(); // conversationId -> Message[]
     this.tools = new Map(); // conversationId -> ToolExecution[]
+    this.owned = new Map(); // id -> { id, ownerId, title, updatedAt, snapshot }
+  }
+
+  // --- Per-account conversation snapshots ---------------------------------
+  // User-facing chat history, owned by an account and stored as an opaque
+  // snapshot (the client's full conversation). Distinct from the runtime
+  // context above (addMessage/getContext), which feeds the model.
+
+  async upsertConversation({ id, ownerId, title, updatedAt, snapshot }) {
+    if (!id || !ownerId) throw new Error('id and ownerId are required');
+    const rec = {
+      id,
+      ownerId,
+      title: title || 'New conversation',
+      updatedAt: updatedAt || Date.now(),
+      snapshot: snapshot ?? null,
+    };
+    this.owned.set(id, rec);
+    return rec;
+  }
+
+  async listConversations(ownerId) {
+    return [...this.owned.values()]
+      .filter((c) => c.ownerId === ownerId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(({ id, title, updatedAt }) => ({ id, title, updatedAt }));
+  }
+
+  async getConversation(id, ownerId) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return null;
+    return rec;
+  }
+
+  async renameConversation(id, ownerId, title) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return false;
+    rec.title = title;
+    rec.updatedAt = Date.now();
+    // Keep the client snapshot in sync so list/hydrate reflect the new title.
+    if (rec.snapshot && typeof rec.snapshot === 'object') {
+      rec.snapshot.title = title;
+      rec.snapshot.updatedAt = rec.updatedAt;
+    }
+    return true;
+  }
+
+  async deleteConversation(id, ownerId) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return false;
+    this.owned.delete(id);
+    return true;
   }
 
   async createConversation(title = 'New conversation') {
