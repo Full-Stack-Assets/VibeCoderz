@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Citations, DataChart } from './ToolResult'
+import { renderMarkdown } from '@/lib/markdown'
 import type { Msg } from '@/lib/types'
 
 function CopyButton({ text }: { text: string }) {
@@ -26,42 +27,45 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-/** Tiny, safe markdown subset: fenced code, inline code, bold, blockquote, paragraphs. */
-function renderMarkdown(src: string): string {
-  const blocks = src.split(/```/)
-  let html = ''
-  blocks.forEach((block, i) => {
-    if (i % 2 === 1) {
-      const body = block.replace(/^[a-z0-9]*\n/i, '')
-      html += `<pre><code>${esc(body.replace(/\n$/, ''))}</code></pre>`
-      return
-    }
-    block
-      .split(/\n{2,}/)
-      .filter((p) => p.trim().length)
-      .forEach((para) => {
-        let p = esc(para)
-        p = p.replace(/`([^`]+)`/g, '<code>$1</code>')
-        p = p.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        // [label](https://url) → safe external link
-        p = p.replace(
-          /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-          '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-        )
-        if (/^&gt;\s?/.test(p)) {
-          html += `<blockquote>${p.replace(/^&gt;\s?/gm, '')}</blockquote>`
-        } else {
-          html += `<p>${p.replace(/\n/g, '<br/>')}</p>`
-        }
+/**
+ * After markdown renders, attach a "Copy" button to each fenced code block.
+ * Done via the DOM (rather than in the HTML string) so the click handler and
+ * "Copied" feedback stay in React's world without re-parsing the markup.
+ */
+function useCodeCopyButtons(deps: unknown[]) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    root.querySelectorAll<HTMLElement>('.codeblock').forEach((block) => {
+      if (block.querySelector('.code-copy')) return
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'code-copy'
+      btn.textContent = 'Copy'
+      btn.addEventListener('click', () => {
+        const code = block.querySelector('code')?.textContent ?? ''
+        navigator.clipboard
+          ?.writeText(code)
+          .then(() => {
+            btn.textContent = 'Copied'
+            setTimeout(() => {
+              btn.textContent = 'Copy'
+            }, 1200)
+          })
+          .catch(() => {})
       })
-  })
-  return html
+      block.appendChild(btn)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+  return ref
 }
 
 export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }) {
+  // Hook must run for every message (Rules of Hooks); the ref only binds below.
+  const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
+
   if (msg.role === 'user') {
     return (
       <div className="msg user">
@@ -140,6 +144,7 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
               </div>
             )}
             <div
+              ref={bodyRef}
               className="assistant-body"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
             />

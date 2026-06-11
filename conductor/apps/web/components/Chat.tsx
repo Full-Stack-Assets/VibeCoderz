@@ -66,14 +66,32 @@ export function Chat() {
   const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef<Msg[]>([])
   messagesRef.current = messages
+  const spentRef = useRef(0)
+  spentRef.current = spent
+  const mounted = useRef(false)
 
   useEffect(() => setConversations(listConversations()), [])
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Restore persisted theme + agent preference after mount (the inline script in
+  // layout.tsx already applied the theme class pre-paint, so there's no flash).
   useEffect(() => {
+    const stored = localStorage.getItem('conductor-theme')
+    setDark(stored ? stored === 'dark' : document.documentElement.classList.contains('dark'))
+    setAgent(localStorage.getItem('conductor-agent') === '1')
+    mounted.current = true
+  }, [])
+  useEffect(() => {
+    if (!mounted.current) return // don't clobber the pre-paint theme on first render
     document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('conductor-theme', dark ? 'dark' : 'light')
   }, [dark])
+  useEffect(() => {
+    if (!mounted.current) return
+    localStorage.setItem('conductor-agent', agent ? '1' : '0')
+  }, [agent])
 
   const autosize = () => {
     const ta = taRef.current
@@ -225,8 +243,8 @@ export function Chat() {
       } finally {
         setSending(false)
         abortRef.current = null
-        // Persist after the turn settles.
-        setTimeout(() => persistLocal(cid, messagesRef.current, 0), 0)
+        // Persist after the turn settles, keeping the session's running cost.
+        setTimeout(() => persistLocal(cid, messagesRef.current, spentRef.current), 0)
       }
     },
     [sending, currentId, spent, agent, attachments, persistLocal]
