@@ -7,12 +7,30 @@
  * parse the `\n\n`-delimited SSE frames out of the growing `responseText`.
  * This mirrors the web shell's reader loop in components/Chat.tsx.
  */
-import type { DoneInfo, RouteDecision, ToolStep } from './types'
+import type { Attachment, DoneInfo, RouteDecision, ToolStep } from './types'
 import { normalizeBaseUrl } from './config'
+
+/** What the backend's `/api/chat` accepts per attachment (image branch). */
+interface OutAttachment {
+  kind: 'image'
+  name: string
+  mediaType: string
+  dataUrl: string
+}
 
 export interface OutMsg {
   role: 'user' | 'assistant'
   content: string
+  attachments?: OutAttachment[]
+}
+
+/** Strip UI-only fields, keeping just what the server needs to forward images. */
+export const toOutAttachments = (atts: Attachment[] | undefined): OutAttachment[] | undefined => {
+  if (!atts || atts.length === 0) return undefined
+  const out = atts
+    .filter((a) => a.kind === 'image' && a.dataUrl)
+    .map((a) => ({ kind: 'image' as const, name: a.name, mediaType: a.mediaType, dataUrl: a.dataUrl }))
+  return out.length ? out : undefined
 }
 
 export interface ChatRequest {
