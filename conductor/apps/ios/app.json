@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.conductor.ios"
+      "bundleIdentifier": "app.conductor.ios",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Conductor uses your photos so you can attach images to a message.",
+        "NSCameraUsageDescription": "Conductor uses the camera so you can attach a photo to a message."
+      }
     },
     "android": {
       "package": "app.conductor.ios",
@@ -24,6 +28,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Conductor uses your photos so you can attach images to a message.",
+          "cameraPermission": "Conductor uses the camera so you can attach a photo to a message."
+        }
+      ]
+    ]
   }
 }

@@ -74,15 +74,30 @@ export interface DoneInfo {
   stepCount?: number
 }
 
+/** A user-attached image, sent to vision-capable models as a data URL. */
+export interface Attachment {
+  id: string
+  kind: 'image'
+  name: string
+  mediaType: string
+  /** `data:<mime>;base64,…` — what the backend forwards to the model. */
+  dataUrl: string
+  width?: number
+  height?: number
+}
+
 /** A chat message as held in the UI. */
 export interface Msg {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: Attachment[]
   decision?: RouteDecision
   simulated?: boolean
   costUSD?: number
   pending?: boolean
   steps?: ToolStep[]
   error?: boolean
+  /** Set when a persisted turn was cut off (app closed/crashed mid-stream). */
+  interrupted?: boolean
 }

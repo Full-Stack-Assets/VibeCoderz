@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { Image, StyleSheet, Text, View } from 'react-native'
 import type { Msg } from '../types'
 import type { Theme } from '../theme'
 import { radius } from '../theme'
@@ -13,11 +13,25 @@ import { TypingDots } from './TypingDots'
  */
 export function MessageBubble({ msg, theme }: { msg: Msg; theme: Theme }) {
   if (msg.role === 'user') {
+    const images = (msg.attachments ?? []).filter((a) => a.kind === 'image' && a.dataUrl)
     return (
       <View style={styles.userRow}>
-        <View style={[styles.userBubble, { backgroundColor: theme.userBubble }]}>
-          <Text style={[styles.userText, { color: theme.text }]}>{msg.content}</Text>
-        </View>
+        {images.length > 0 ? (
+          <View style={styles.imageStrip}>
+            {images.map((a) => (
+              <Image
+                key={a.id}
+                source={{ uri: a.dataUrl }}
+                style={[styles.image, { borderColor: theme.line }]}
+              />
+            ))}
+          </View>
+        ) : null}
+        {msg.content ? (
+          <View style={[styles.userBubble, { backgroundColor: theme.userBubble }]}>
+            <Text style={[styles.userText, { color: theme.text }]}>{msg.content}</Text>
+          </View>
+        ) : null}
       </View>
     )
   }
@@ -47,6 +61,12 @@ export function MessageBubble({ msg, theme }: { msg: Msg; theme: Theme }) {
           {msg.content}
         </Text>
       ) : null}
+
+      {msg.interrupted ? (
+        <Text style={[styles.interrupted, { color: theme.faint }]}>
+          ⊘ This reply was interrupted and resumed from memory.
+        </Text>
+      ) : null}
     </View>
   )
 }
@@ -61,6 +81,9 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   userText: { fontSize: 16, lineHeight: 23 },
+  imageStrip: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, marginBottom: 6, maxWidth: '86%' },
+  image: { width: 150, height: 150, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth },
   assistantRow: { alignItems: 'flex-start', marginVertical: 9, width: '100%' },
   assistantText: { fontSize: 16.5, lineHeight: 25 },
+  interrupted: { fontSize: 12.5, marginTop: 8, fontStyle: 'italic' },
 })
