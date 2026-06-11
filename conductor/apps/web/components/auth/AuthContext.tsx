@@ -1,73 +1,115 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import {
-  localAuth,
-  type AuthProvider,
-  type MagicChallenge,
-  type PlanId,
-  type Session,
-  type User,
-} from '@/lib/auth'
+import type { PlanId, User } from '@/lib/auth'
+
+interface BillingConfig {
+  enabled: boolean
+  plans: { pro: boolean; max: boolean }
+}
 
 interface AuthValue {
   loading: boolean
   user: User | null
-  requestMagicLink: (email: string, name?: string) => Promise<MagicChallenge>
-  verifyMagicCode: (challengeId: string, code: string) => Promise<Session>
-  setPlan: (plan: PlanId) => Promise<User>
-  signOut: () => Promise<void>
+  billing: BillingConfig
+  register: (email: string, password: string, name: string) => Promise<User>
+  login: (email: string, password: string) => Promise<User>
+  logout: () => Promise<void>
+  refresh: () => Promise<User | null>
+  /** Start Stripe Checkout for a paid plan; resolves to a redirect URL. */
+  startCheckout: (plan: PlanId) => Promise<string>
+  /** Open the Stripe billing portal; resolves to a redirect URL. */
+  openPortal: () => Promise<string>
 }
 
 const Ctx = createContext<AuthValue | null>(null)
 
-export function AuthProviderComponent({
-  children,
-  provider = localAuth,
-}: {
-  children: ReactNode
-  provider?: AuthProvider
-}) {
+async function postJSON(url: string, body?: unknown): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+async function readError(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json()
+    return (data as { error?: string }).error || fallback
+  } catch {
+    return fallback
+  }
+}
+
+export function AuthProviderComponent({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [billing, setBilling] = useState<BillingConfig>({ enabled: false, plans: { pro: false, max: false } })
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const data = (await res.json()) as { user: User | null }
+      setUser(data.user)
+      return data.user
+    } catch {
+      setUser(null)
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
-    provider
-      .restore()
-      .then((s) => alive && setSession(s))
-      .catch(() => alive && setSession(null))
-      .finally(() => alive && setLoading(false))
+    Promise.all([
+      refresh(),
+      fetch('/api/billing/config')
+        .then((r) => r.json())
+        .catch(() => null),
+    ]).then(([, cfg]) => {
+      if (alive && cfg) setBilling(cfg as BillingConfig)
+      if (alive) setLoading(false)
+    })
     return () => {
       alive = false
     }
-  }, [provider])
+  }, [refresh])
 
-  const requestMagicLink = useCallback((email: string, name?: string) => provider.requestMagicLink(email, name), [provider])
-  const verifyMagicCode = useCallback(
-    async (challengeId: string, code: string) => {
-      const s = await provider.verifyMagicCode(challengeId, code)
-      setSession(s)
-      return s
-    },
-    [provider]
-  )
-  const setPlan = useCallback(
-    async (plan: PlanId) => {
-      const user = await provider.setPlan(plan)
-      setSession((prev) => (prev ? { ...prev, user } : prev))
-      return user
-    },
-    [provider]
-  )
-  const signOut = useCallback(async () => {
-    await provider.signOut()
-    setSession(null)
-  }, [provider])
+  const register = useCallback(async (email: string, password: string, name: string) => {
+    const res = await postJSON('/api/auth/register', { email, password, name })
+    if (!res.ok) throw new Error(await readError(res, 'Could not create your account.'))
+    const { user } = (await res.json()) as { user: User }
+    setUser(user)
+    return user
+  }, [])
+
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await postJSON('/api/auth/login', { email, password })
+    if (!res.ok) throw new Error(await readError(res, 'Could not sign you in.'))
+    const { user } = (await res.json()) as { user: User }
+    setUser(user)
+    return user
+  }, [])
+
+  const logout = useCallback(async () => {
+    await postJSON('/api/auth/logout').catch(() => {})
+    setUser(null)
+  }, [])
+
+  const startCheckout = useCallback(async (plan: PlanId) => {
+    const res = await postJSON('/api/billing/checkout', { plan })
+    if (!res.ok) throw new Error(await readError(res, 'Could not start checkout.'))
+    return ((await res.json()) as { url: string }).url
+  }, [])
+
+  const openPortal = useCallback(async () => {
+    const res = await postJSON('/api/billing/portal')
+    if (!res.ok) throw new Error(await readError(res, 'Could not open the billing portal.'))
+    return ((await res.json()) as { url: string }).url
+  }, [])
 
   const value = useMemo<AuthValue>(
-    () => ({ loading, user: session?.user ?? null, requestMagicLink, verifyMagicCode, setPlan, signOut }),
-    [loading, session, requestMagicLink, verifyMagicCode, setPlan, signOut]
+    () => ({ loading, user, billing, register, login, logout, refresh, startCheckout, openPortal }),
+    [loading, user, billing, register, login, logout, refresh, startCheckout, openPortal]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

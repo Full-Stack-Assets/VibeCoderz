@@ -1,21 +1,22 @@
 /**
  * Store factory — picks the persistence backend at runtime.
  *
- * DATABASE_URL set + @prisma/client available → PrismaStore (durable Postgres).
- * Otherwise → InMemoryStore (zero-config). If Postgres is requested but the
- * client/connection isn't available, it logs and falls back to in-memory rather
- * than crashing the app — memory is best-effort and never blocks a chat turn.
+ * DATABASE_URL set → PgStore (durable Postgres that provisions its own schema on
+ * first use — no Prisma CLI / migrations needed). If Postgres is requested but
+ * the `pg` driver/connection isn't available, it logs and falls back to the
+ * in-memory store rather than crashing — memory is best-effort and never blocks
+ * a chat turn. (PrismaStore remains available for teams that prefer Prisma.)
  */
 
 import { InMemoryStore } from './memory-store.js';
-import { PrismaStore } from './prisma-store.js';
+import { PgStore } from './pg-store.js';
 
 let _singleton = null;
 
 export async function createStore({ databaseUrl = process.env.DATABASE_URL } = {}) {
   if (databaseUrl) {
     try {
-      return await PrismaStore.create();
+      return await PgStore.create();
     } catch (err) {
       console.warn(
         `[agent-memory] DATABASE_URL set but Postgres store unavailable ` +

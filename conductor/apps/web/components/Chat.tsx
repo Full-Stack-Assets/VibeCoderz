@@ -17,11 +17,18 @@ import {
   titleFrom,
   type StoredConversation,
 } from '@/lib/history'
+import {
+  pullServerConversations,
+  pushServerConversation,
+  deleteServerConversation,
+  renameServerConversation,
+} from '@/lib/historyServer'
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
-import { planById, type PlanId } from '@/lib/auth'
+import { ShortcutsHelp } from './ShortcutsHelp'
+import { planById } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const SUGGESTIONS = [
@@ -44,6 +51,12 @@ function greetingText() {
 let idc = 0
 const mkId = () => `m${Date.now()}_${idc++}`
 const convId = () => `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+// Honor reduced-motion for programmatic scrolls (scrollIntoView ignores the CSS
+// scroll-behavior override, so we pick the behavior explicitly).
+const scrollBehavior = (): ScrollBehavior =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth'
 
 interface AuditItem {
   time: string
@@ -54,15 +67,20 @@ interface AuditItem {
 }
 
 export function Chat() {
-  const { user, signOut, setPlan } = useAuth()
+  const { user, logout } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
+  // Stable handle to the current account id for fire-and-forget cloud sync.
+  const userIdRef = useRef<string | null>(null)
+  userIdRef.current = user?.id ?? null
   const [accountOpen, setAccountOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [routingOpen, setRoutingOpen] = useState(false)
   const [preferModel, setPreferModel] = useState<string | null>(null)
   const [qualityFloor, setQualityFloor] = useState(0)
   const [models, setModels] = useState<CatalogModel[]>([])
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [budgetCap, setBudgetCap] = useState<number | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -103,10 +121,34 @@ export function Chat() {
       alive = false
     }
   }, [])
+  // On sign-in, pull this account's cloud history and merge it into the local
+  // cache (server wins only when strictly newer), then refresh the list.
+  useEffect(() => {
+    const uid = user?.id
+    if (!uid) return
+    let alive = true
+    pullServerConversations().then((remote) => {
+      if (!alive || remote.length === 0) return
+      const local = new Map(listConversations().map((c) => [c.id, c.updatedAt ?? 0]))
+      let changed = false
+      for (const rc of remote) {
+        if (!rc?.id) continue
+        if (!local.has(rc.id) || (rc.updatedAt ?? 0) > (local.get(rc.id) ?? 0)) {
+          saveConversation(rc)
+          changed = true
+        }
+      }
+      if (changed) setConversations(listConversations())
+    })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
   // Auto-scroll only when the user is already pinned to the bottom, so reading
   // back through a streaming reply doesn't yank them down.
   useEffect(() => {
-    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() })
   }, [messages])
 
   const onConvScroll = () => {
@@ -115,7 +157,7 @@ export function Chat() {
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120)
   }
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() })
     setAtBottom(true)
   }
 
@@ -146,10 +188,13 @@ export function Chat() {
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
   }
 
-  // Persist the current conversation to localStorage and refresh the list.
+  // Persist the current conversation to localStorage (instant) and mirror it to
+  // the per-account cloud store (best-effort) so it survives across sessions.
   const persistLocal = useCallback((id: string, msgs: Msg[], spentUSD: number) => {
-    saveConversation({ id, title: titleFrom(msgs), updatedAt: Date.now(), spentUSD, messages: msgs })
+    const conv: StoredConversation = { id, title: titleFrom(msgs), updatedAt: Date.now(), spentUSD, messages: msgs }
+    saveConversation(conv)
     setConversations(listConversations())
+    if (userIdRef.current) void pushServerConversation(conv)
   }, [])
 
   const patch = (id: string, fn: (m: Msg) => Msg) =>
@@ -227,6 +272,7 @@ export function Chat() {
           if (event === 'decision') {
             const d = data.decision as RouteDecision
             setDecision(d)
+            if (d.budget?.budgetUSD) setBudgetCap(d.budget.budgetUSD)
             patch(pendingId, (m) => ({ ...m, decision: d }))
             if (d.model) {
               setAudit((a) => [
@@ -356,14 +402,45 @@ export function Chat() {
     }
   }
 
-  const newChat = () => {
+  const newChat = useCallback(() => {
     setMessages([])
     setDecision(null)
     setAudit([])
     setSpent(0)
     setCurrentId(null)
     setSidebarOpen(false)
-  }
+  }, [])
+
+  // Global keyboard shortcuts. Overlays with focus traps handle their own
+  // Escape (they stop propagation), so this only closes the trapless sidebar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      const k = e.key.toLowerCase()
+      if (mod && e.shiftKey && k === 'o') {
+        e.preventDefault()
+        newChat()
+      } else if (mod && k === 'k') {
+        e.preventDefault()
+        taRef.current?.focus()
+      } else if (mod && k === 'b') {
+        e.preventDefault()
+        setSidebarOpen((s) => !s)
+      } else if (e.key === '?' && !mod && !e.altKey) {
+        const el = document.activeElement as HTMLElement | null
+        const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+        if (!typing) {
+          e.preventDefault()
+          setShortcutsOpen(true)
+        }
+      } else if (e.key === 'Escape') {
+        if (abortRef.current) abortRef.current.abort()
+        else setSidebarOpen((s) => (s ? false : s))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [newChat])
 
   const selectConversation = (id: string) => {
     const conv = loadConversation(id)
@@ -380,11 +457,13 @@ export function Chat() {
     deleteConversation(id)
     setConversations(listConversations())
     if (id === currentId) newChat()
+    if (userIdRef.current) void deleteServerConversation(id)
   }
 
   const renameConv = (id: string, title: string) => {
     renameConversation(id, title)
     setConversations(listConversations())
+    if (userIdRef.current) void renameServerConversation(id, title.trim().slice(0, 80))
   }
 
   const exportConv = (id: string) => {
@@ -405,6 +484,7 @@ export function Chat() {
     (preferModel && models.find((m) => m.id === preferModel)?.label) ||
     preferModel?.split('/').pop() ||
     ''
+  const budgetUtil = budgetCap ? spent / budgetCap : 0
 
   return (
     <div className="app">
@@ -422,7 +502,7 @@ export function Chat() {
 
       <div className="main">
         <div className="topbar">
-          <button className="iconbtn" onClick={() => setSidebarOpen((s) => !s)} title="Conversations" aria-label="Conversations">
+          <button className="iconbtn" onClick={() => setSidebarOpen((s) => !s)} title="Conversations (⌘/Ctrl+B)" aria-label="Conversations">
             <MenuIcon />
           </button>
           <div className="brand">
@@ -519,7 +599,7 @@ export function Chat() {
                     className="account-item danger"
                     onClick={async () => {
                       setAccountOpen(false)
-                      await signOut()
+                      await logout()
                     }}
                   >
                     Sign out
@@ -640,6 +720,20 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              {budgetCap && (
+                <div className="composer-budget" title="Session budget — turns throttle near the cap">
+                  <div className="cb-bar">
+                    <div
+                      className={`cb-fill ${budgetUtil > 0.85 ? 'crit' : budgetUtil > 0.6 ? 'warn' : ''}`}
+                      style={{ width: `${Math.min(100, budgetUtil * 100)}%` }}
+                    />
+                  </div>
+                  <span className="cb-label">
+                    ${spent.toFixed(4)} / ${budgetCap.toFixed(2)}
+                    {budgetUtil >= 0.85 ? ' · near cap' : ''}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="composer-hint">
               Code · web research · data · images — routed by the COO engine, streamed live, simulated until a gateway key is set
@@ -654,17 +748,8 @@ export function Chat() {
         </div>
       </div>
 
-      {planOpen && (
-        <Pricing
-          mode="manage"
-          currentPlan={user?.plan}
-          onChoose={async (p: PlanId) => {
-            await setPlan(p)
-            setPlanOpen(false)
-          }}
-          onClose={() => setPlanOpen(false)}
-        />
-      )}
+      {planOpen && <Pricing mode="manage" onClose={() => setPlanOpen(false)} />}
+      {shortcutsOpen && <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />}
     </div>
   )
 }

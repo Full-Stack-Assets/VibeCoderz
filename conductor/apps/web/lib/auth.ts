@@ -1,14 +1,13 @@
 'use client'
 
 /**
- * Web auth + plans for Conductor — mirrors the iOS app's model.
+ * Shared auth types + plan catalog for the web client.
  *
- * The backend ships no auth and there's no mail server here, so sign-in is a
- * SELF-CONTAINED passwordless ("magic link") flow whose session + accounts live
- * in localStorage. Everything funnels through `AuthProvider`, so going live is a
- * one-file change: implement it against a real backend (Supabase / Clerk /
- * /api/auth) and stop returning `devCode`. Screens, context, and gating don't
- * change. The methods are async for parity with a networked implementation.
+ * Authentication is real and server-side now: email + password with an
+ * HTTP-only session cookie (see app/api/auth/* and lib/server/*). The client
+ * never sees password hashes or session tokens — it talks to those routes and
+ * reads the current account from /api/auth/me. Billing is real Stripe Checkout
+ * (app/api/billing/*).
  */
 
 export type PlanId = 'free' | 'pro' | 'max'
@@ -62,145 +61,11 @@ export const planById = (id: PlanId | undefined): Plan => PLANS.find((p) => p.id
 export interface User {
   id: string
   email: string
-  name?: string
+  name: string | null
   plan: PlanId
-  createdAt: number
+  role: 'user' | 'admin'
+  subscriptionStatus: string | null
 }
 
-export interface Session {
-  user: User
-  token: string
-  issuedAt: number
-}
-
-export interface MagicChallenge {
-  challengeId: string
-  email: string
-  isNewUser: boolean
-  /** Demo only: a real deployment emails this instead of returning it. */
-  devCode?: string
-}
-
-export interface AuthProvider {
-  requestMagicLink(email: string, name?: string): Promise<MagicChallenge>
-  verifyMagicCode(challengeId: string, code: string): Promise<Session>
-  setPlan(plan: PlanId): Promise<User>
-  restore(): Promise<Session | null>
-  signOut(): Promise<void>
-}
-
-const K = {
-  session: 'conductor.auth.session.v1',
-  users: 'conductor.auth.users.v1',
-  pending: 'conductor.auth.pending.v1',
-}
-const CODE_TTL_MS = 10 * 60 * 1000
-
-interface Pending {
-  challengeId: string
-  email: string
-  code: string
-  name?: string
-  isNewUser: boolean
-  expiresAt: number
-}
-
-const emailKey = (e: string) => e.trim().toLowerCase()
-const randId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
-const sixDigit = () => String(Math.floor(100000 + Math.random() * 900000))
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isValidEmail = (e: string) => EMAIL_RE.test(e.trim())
-
-function readJSON<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const raw = window.localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
-function writeJSON(key: string, value: unknown) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    /* quota / private mode */
-  }
-}
-function remove(key: string) {
-  try {
-    window.localStorage.removeItem(key)
-  } catch {
-    /* ignore */
-  }
-}
-
-export const localAuth: AuthProvider = {
-  async requestMagicLink(email, name) {
-    if (!isValidEmail(email)) throw new Error('Enter a valid email address.')
-    const users = readJSON<Record<string, User>>(K.users, {})
-    const isNewUser = !users[emailKey(email)]
-    const challenge: Pending = {
-      challengeId: randId(),
-      email: email.trim(),
-      code: sixDigit(),
-      name: name?.trim() || undefined,
-      isNewUser,
-      expiresAt: Date.now() + CODE_TTL_MS,
-    }
-    writeJSON(K.pending, challenge)
-    return { challengeId: challenge.challengeId, email: challenge.email, isNewUser, devCode: challenge.code }
-  },
-
-  async verifyMagicCode(challengeId, code) {
-    const pending = readJSON<Pending | null>(K.pending, null)
-    if (!pending || pending.challengeId !== challengeId) {
-      throw new Error('This sign-in request expired. Request a new code.')
-    }
-    if (Date.now() > pending.expiresAt) {
-      remove(K.pending)
-      throw new Error('Your code expired. Request a new one.')
-    }
-    if (code.trim() !== pending.code) throw new Error('That code is incorrect. Check it and try again.')
-
-    const users = readJSON<Record<string, User>>(K.users, {})
-    const key = emailKey(pending.email)
-    const user: User =
-      users[key] ?? {
-        id: randId(),
-        email: pending.email,
-        name: pending.name,
-        plan: 'free',
-        createdAt: Date.now(),
-      }
-    users[key] = user
-    writeJSON(K.users, users)
-
-    const session: Session = { user, token: randId(), issuedAt: Date.now() }
-    writeJSON(K.session, session)
-    remove(K.pending)
-    return session
-  },
-
-  async setPlan(plan) {
-    const session = readJSON<Session | null>(K.session, null)
-    if (!session) throw new Error('Not signed in.')
-    const user: User = { ...session.user, plan }
-    writeJSON(K.session, { ...session, user })
-    const users = readJSON<Record<string, User>>(K.users, {})
-    users[emailKey(user.email)] = user
-    writeJSON(K.users, users)
-    return user
-  },
-
-  async restore() {
-    const session = readJSON<Session | null>(K.session, null)
-    if (!session || !session.user || !session.token) return null
-    return session
-  },
-
-  async signOut() {
-    remove(K.session)
-    remove(K.pending)
-  },
-}

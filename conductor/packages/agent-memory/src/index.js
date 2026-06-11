@@ -8,6 +8,7 @@
  */
 
 export { InMemoryStore } from './memory-store.js';
+export { PgStore } from './pg-store.js';
 export { PrismaStore } from './prisma-store.js';
 export { createStore, getStore } from './factory.js';
 

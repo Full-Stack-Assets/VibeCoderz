@@ -1,7 +1,7 @@
 {
   "name": "@conductor/agent-memory",
-  "version": "1.1.0",
-  "description": "Conversation memory for the agent runtime — in-memory by default, Postgres (Prisma) when DATABASE_URL is set.",
+  "version": "1.2.0",
+  "description": "Conversation memory + accounts for the agent runtime — in-memory by default, self-provisioning Postgres when DATABASE_URL is set.",
   "type": "module",
   "main": "./src/index.js",
   "exports": { ".": "./src/index.js" },
@@ -11,7 +11,10 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio"
   },
-  "comment": "Postgres is opt-in: run `pnpm add @prisma/client prisma` here, then `pnpm prisma:generate` and set DATABASE_URL. PrismaStore lazy-imports @prisma/client, so it stays optional.",
+  "comment": "Zero-setup Postgres: set DATABASE_URL and PgStore creates its own tables on first use (no CLI). `pg` is lazy-imported, so it stays a no-op until DATABASE_URL is set. PrismaStore remains as an alternative for teams who prefer Prisma migrations.",
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
   "license": "MIT",
   "engines": { "node": ">=18.0.0" }
 }

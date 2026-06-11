@@ -1203,3 +1203,80 @@ button.model-pill.pinned { border-color: var(--coral); color: var(--coral-press)
 @media (max-width: 560px) {
   .rc-pop { width: calc(100vw - 24px); right: -8px; }
 }
+
+/* Inline retry on errored turns */
+.msg-action.retry { color: var(--coral-press); font-weight: 700; }
+.msg-action.retry:hover { background: var(--coral-tint); }
+
+/* ---- Respect reduced-motion preferences --------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Billing not-configured notice on the pricing screen */
+.pricing-notice {
+  font-size: 13.5px;
+  color: var(--coral-press);
+  background: var(--coral-tint);
+  border: 1px solid var(--coral);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+
+/* ---- Keyboard shortcuts overlay ----------------------------------------- */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(20, 20, 19, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.shortcuts {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-raised);
+  padding: 20px;
+  outline: none;
+}
+.shortcuts-head { font-family: var(--font-serif); font-size: 18px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+.shortcuts-list { margin: 0 0 14px; }
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.shortcut-row:last-child { border-bottom: none; }
+.shortcut-row dt { margin: 0; }
+.shortcut-row dd { margin: 0; font-size: 13.5px; color: var(--muted); text-align: right; }
+kbd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-soft);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* ---- Per-conversation cost in the sidebar ------------------------------- */
+.conv-cost { flex: 0 0 auto; font-size: 11px; color: var(--faint); font-family: var(--font-mono); }
+.conv-item:hover .conv-cost { display: none; }
+
+/* ---- Composer session-budget meter -------------------------------------- */
+.composer-budget { width: 100%; max-width: 720px; display: flex; align-items: center; gap: 8px; margin: 6px 0 -4px; padding: 0 2px; }
+.cb-bar { flex: 1; height: 4px; border-radius: 999px; background: var(--surface-sunk); overflow: hidden; }
+.cb-fill { height: 100%; background: var(--green); transition: width 0.3s ease; }
+.cb-fill.warn { background: #c9a227; }
+.cb-fill.crit { background: var(--coral-press); }
+.cb-label { font-size: 11px; color: var(--faint); font-family: var(--font-mono); white-space: nowrap; }

@@ -82,5 +82,6 @@ export interface Msg {
   simulated?: boolean
   costUSD?: number
   pending?: boolean
+  error?: boolean
   steps?: ToolStep[]
 }

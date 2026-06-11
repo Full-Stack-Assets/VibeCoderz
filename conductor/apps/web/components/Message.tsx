@@ -211,6 +211,14 @@ export function Message({
               className="assistant-body"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
             />
+            {/* Errored turns carry no routing meta — offer a direct retry. */}
+            {msg.error && onRegenerate && (
+              <div className="msg-meta">
+                <button className="msg-action retry" title="Retry this turn" onClick={onRegenerate}>
+                  ↻ Retry
+                </button>
+              </div>
+            )}
           </>
         )}
         {msg.decision?.model && !msg.pending && (

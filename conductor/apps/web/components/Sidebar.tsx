@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Burst } from './Burst'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 import type { StoredConversation } from '@/lib/history'
 
 export function Sidebar({
@@ -28,6 +29,9 @@ export function Sidebar({
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const asideRef = useRef<HTMLElement>(null)
+  // Trap focus while the drawer is open (it overlays the app behind a scrim).
+  useFocusTrap(asideRef, open, onClose)
 
   const q = query.trim().toLowerCase()
   const filtered = q ? conversations.filter((c) => c.title.toLowerCase().includes(q)) : conversations
@@ -44,14 +48,22 @@ export function Sidebar({
 
   return (
     <>
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
+      <aside
+        ref={asideRef}
+        className={`sidebar ${open ? 'open' : ''}`}
+        role="dialog"
+        aria-modal={open}
+        aria-label="Conversations"
+        inert={!open}
+        tabIndex={-1}
+      >
         <div className="sidebar-head">
           <span className="brand" style={{ color: 'var(--coral)' }}>
             <Burst size={20} />
           </span>
           <span className="sidebar-title">Conductor</span>
         </div>
-        <button className="new-chat" onClick={onNew}>
+        <button className="new-chat" onClick={onNew} title="New chat (⌘/Ctrl+Shift+O)">
           <PlusIcon /> New chat
         </button>
         {conversations.length > 0 && (
@@ -95,6 +107,7 @@ export function Sidebar({
                   {c.title}
                 </span>
               )}
+              {c.spentUSD > 0 && <span className="conv-cost">${c.spentUSD.toFixed(4)}</span>}
               <div className="conv-actions">
                 <button
                   className="conv-act"

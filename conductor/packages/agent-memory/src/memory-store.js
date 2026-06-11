@@ -15,6 +15,120 @@ export class InMemoryStore {
     this.conversations = new Map(); // id -> { id, title, createdAt }
     this.messages = new Map(); // conversationId -> Message[]
     this.tools = new Map(); // conversationId -> ToolExecution[]
+    this.owned = new Map(); // id -> { id, ownerId, title, updatedAt, snapshot }
+    this.users = new Map(); // id -> User
+    this.usersByEmail = new Map(); // lowercased email -> id
+    this.sessions = new Map(); // token -> { token, userId, expiresAt }
+  }
+
+  // --- Accounts & sessions (email + password auth) ------------------------
+
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+    const key = String(email).trim().toLowerCase();
+    if (this.usersByEmail.has(key)) throw new Error('An account with that email already exists.');
+    const user = {
+      id: nextId('user'),
+      email: String(email).trim(),
+      name: name || null,
+      passwordHash,
+      plan,
+      role,
+      stripeCustomerId: null,
+      subscriptionStatus: null,
+      createdAt: Date.now(),
+    };
+    this.users.set(user.id, user);
+    this.usersByEmail.set(key, user.id);
+    return user;
+  }
+
+  async getUserByEmail(email) {
+    const id = this.usersByEmail.get(String(email).trim().toLowerCase());
+    return id ? this.users.get(id) : null;
+  }
+
+  async getUserById(id) {
+    return this.users.get(id) || null;
+  }
+
+  async updateUser(id, patch) {
+    const user = this.users.get(id);
+    if (!user) return null;
+    Object.assign(user, patch);
+    return user;
+  }
+
+  async createSession(userId, token, expiresAt) {
+    const session = { token, userId, expiresAt };
+    this.sessions.set(token, session);
+    return session;
+  }
+
+  async getSession(token) {
+    const session = this.sessions.get(token);
+    if (!session) return null;
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      this.sessions.delete(token);
+      return null;
+    }
+    const user = this.users.get(session.userId);
+    if (!user) return null;
+    return { session, user };
+  }
+
+  async deleteSession(token) {
+    return this.sessions.delete(token);
+  }
+
+  // --- Per-account conversation snapshots ---------------------------------
+  // User-facing chat history, owned by an account and stored as an opaque
+  // snapshot (the client's full conversation). Distinct from the runtime
+  // context above (addMessage/getContext), which feeds the model.
+
+  async upsertConversation({ id, ownerId, title, updatedAt, snapshot }) {
+    if (!id || !ownerId) throw new Error('id and ownerId are required');
+    const rec = {
+      id,
+      ownerId,
+      title: title || 'New conversation',
+      updatedAt: updatedAt || Date.now(),
+      snapshot: snapshot ?? null,
+    };
+    this.owned.set(id, rec);
+    return rec;
+  }
+
+  async listConversations(ownerId) {
+    return [...this.owned.values()]
+      .filter((c) => c.ownerId === ownerId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(({ id, title, updatedAt }) => ({ id, title, updatedAt }));
+  }
+
+  async getConversation(id, ownerId) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return null;
+    return rec;
+  }
+
+  async renameConversation(id, ownerId, title) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return false;
+    rec.title = title;
+    rec.updatedAt = Date.now();
+    // Keep the client snapshot in sync so list/hydrate reflect the new title.
+    if (rec.snapshot && typeof rec.snapshot === 'object') {
+      rec.snapshot.title = title;
+      rec.snapshot.updatedAt = rec.updatedAt;
+    }
+    return true;
+  }
+
+  async deleteConversation(id, ownerId) {
+    const rec = this.owned.get(id);
+    if (!rec || rec.ownerId !== ownerId) return false;
+    this.owned.delete(id);
+    return true;
   }
 
   async createConversation(title = 'New conversation') {
