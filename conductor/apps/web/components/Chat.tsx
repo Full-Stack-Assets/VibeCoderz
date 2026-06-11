@@ -393,14 +393,38 @@ export function Chat() {
     }
   }
 
-  const newChat = () => {
+  const newChat = useCallback(() => {
     setMessages([])
     setDecision(null)
     setAudit([])
     setSpent(0)
     setCurrentId(null)
     setSidebarOpen(false)
-  }
+  }, [])
+
+  // Global keyboard shortcuts. Overlays with focus traps handle their own
+  // Escape (they stop propagation), so this only closes the trapless sidebar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      const k = e.key.toLowerCase()
+      if (mod && e.shiftKey && k === 'o') {
+        e.preventDefault()
+        newChat()
+      } else if (mod && k === 'k') {
+        e.preventDefault()
+        taRef.current?.focus()
+      } else if (mod && k === 'b') {
+        e.preventDefault()
+        setSidebarOpen((s) => !s)
+      } else if (e.key === 'Escape') {
+        if (abortRef.current) abortRef.current.abort()
+        else setSidebarOpen((s) => (s ? false : s))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [newChat])
 
   const selectConversation = (id: string) => {
     const conv = loadConversation(id)
@@ -461,7 +485,7 @@ export function Chat() {
 
       <div className="main">
         <div className="topbar">
-          <button className="iconbtn" onClick={() => setSidebarOpen((s) => !s)} title="Conversations" aria-label="Conversations">
+          <button className="iconbtn" onClick={() => setSidebarOpen((s) => !s)} title="Conversations (⌘/Ctrl+B)" aria-label="Conversations">
             <MenuIcon />
           </button>
           <div className="brand">

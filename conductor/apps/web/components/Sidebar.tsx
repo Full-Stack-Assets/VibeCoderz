@@ -51,7 +51,7 @@ export function Sidebar({
           </span>
           <span className="sidebar-title">Conductor</span>
         </div>
-        <button className="new-chat" onClick={onNew}>
+        <button className="new-chat" onClick={onNew} title="New chat (⌘/Ctrl+Shift+O)">
           <PlusIcon /> New chat
         </button>
         {conversations.length > 0 && (

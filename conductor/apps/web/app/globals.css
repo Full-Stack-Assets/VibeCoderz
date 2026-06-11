@@ -1203,3 +1203,7 @@ button.model-pill.pinned { border-color: var(--coral); color: var(--coral-press)
 @media (max-width: 560px) {
   .rc-pop { width: calc(100vw - 24px); right: -8px; }
 }
+
+/* Inline retry on errored turns */
+.msg-action.retry { color: var(--coral-press); font-weight: 700; }
+.msg-action.retry:hover { background: var(--coral-tint); }
