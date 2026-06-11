@@ -36,38 +36,38 @@ const NO_KEYS = {
 
 test('canPlanLive gates each provider on its own key', () => {
   withEnv(NO_KEYS, () => {
-    assert.equal(canPlanLive('anthropic/claude-opus-4.6'), false);
-    assert.equal(canPlanLive('openai/gpt-5.3-codex'), false);
-    assert.equal(canPlanLive('xai/grok-4.1-fast-reasoning'), false);
+    assert.equal(canPlanLive('anthropic/claude-opus-4.8'), false);
+    assert.equal(canPlanLive('openai/gpt-5.5-codex'), false);
+    assert.equal(canPlanLive('xai/grok-4.3-fast-reasoning'), false);
   });
   withEnv({ ...NO_KEYS, OPENAI_API_KEY: 'sk-test' }, () => {
-    assert.equal(canPlanLive('openai/gpt-5.3-codex'), true);
-    assert.equal(canPlanLive('xai/grok-4.1-fast-reasoning'), false); // no xai key, no gateway
+    assert.equal(canPlanLive('openai/gpt-5.5-codex'), true);
+    assert.equal(canPlanLive('xai/grok-4.3-fast-reasoning'), false); // no xai key, no gateway
   });
 });
 
 test('a gateway key makes every model live — including Gemini', () => {
   withEnv({ ...NO_KEYS, AI_GATEWAY_API_KEY: 'gw-test' }, () => {
-    assert.equal(canPlanLive('google/gemini-2.5-pro'), true);
-    assert.equal(canPlanLive('anthropic/claude-opus-4.6'), true);
-    const planner = makeLiveToolPlanner({ modelId: 'google/gemini-2.5-pro', ...ARGS });
+    assert.equal(canPlanLive('google/gemini-3-pro'), true);
+    assert.equal(canPlanLive('anthropic/claude-opus-4.8'), true);
+    const planner = makeLiveToolPlanner({ modelId: 'google/gemini-3-pro', ...ARGS });
     assert.equal(typeof planner, 'function'); // gateway-backed, no network yet
   });
   withEnv({ ...NO_KEYS, OPENROUTER_API_KEY: 'or-test' }, () => {
-    assert.equal(canPlanLive('xai/grok-4.1-fast-reasoning'), true);
+    assert.equal(canPlanLive('xai/grok-4.3-fast-reasoning'), true);
   });
 });
 
 test('makeLiveToolPlanner returns null without a key, a planner with one', () => {
   withEnv(NO_KEYS, () => {
-    assert.equal(makeLiveToolPlanner({ modelId: 'openai/gpt-5.3-codex', ...ARGS }), null);
+    assert.equal(makeLiveToolPlanner({ modelId: 'openai/gpt-5.5-codex', ...ARGS }), null);
   });
   withEnv({ ...NO_KEYS, XAI_API_KEY: 'xai-test' }, () => {
-    const planner = makeLiveToolPlanner({ modelId: 'xai/grok-4.1-fast-reasoning', ...ARGS });
+    const planner = makeLiveToolPlanner({ modelId: 'xai/grok-4.3-fast-reasoning', ...ARGS });
     assert.equal(typeof planner, 'function'); // closure built; no network call yet
   });
   withEnv({ ...NO_KEYS, ANTHROPIC_API_KEY: 'ant-test' }, () => {
-    const planner = makeLiveToolPlanner({ modelId: 'anthropic/claude-opus-4.6', ...ARGS });
+    const planner = makeLiveToolPlanner({ modelId: 'anthropic/claude-opus-4.8', ...ARGS });
     assert.equal(typeof planner, 'function');
   });
 });

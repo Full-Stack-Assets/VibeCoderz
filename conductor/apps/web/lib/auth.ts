@@ -41,7 +41,7 @@ export const PLANS: Plan[] = [
     features: [
       'Everything in Free',
       '$25 monthly budget',
-      'Premium models (Opus, GPT-5.3)',
+      'Premium models (Opus, GPT-5.5)',
       'Priority routing',
       'Unlimited conversations',
     ],

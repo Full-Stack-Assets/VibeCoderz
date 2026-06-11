@@ -109,7 +109,7 @@ function meter(model, usage) {
   return Number(((input / 1e6) * p.input + (output / 1e6) * p.output).toFixed(6));
 }
 
-// Map a catalog id (e.g. "anthropic/claude-opus-4.6") to the provider's wire id.
+// Map a catalog id (e.g. "anthropic/claude-opus-4.8") to the provider's wire id.
 function wireModelId(model) {
   const id = model.id.includes('/') ? model.id.split('/').slice(1).join('/') : model.id;
   return id;
