@@ -418,6 +418,127 @@ body {
 .assistant-body .codeblock:hover .code-copy { opacity: 1; }
 .assistant-body .code-copy:hover { color: var(--text); }
 
+/* ---- Message actions (edit / regenerate) -------------------------------- */
+.msg-action {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.msg-action:hover { color: var(--text); background: var(--surface-sunk); }
+.user-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.msg.user:hover .user-actions { opacity: 1; }
+
+/* Inline edit-and-resend box */
+.edit-box {
+  width: 100%;
+  max-width: 560px;
+  margin-left: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.edit-area {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.edit-cancel, .edit-send {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+.edit-send { background: var(--coral); border-color: transparent; color: #fff; }
+.edit-send:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- Scroll-to-bottom button -------------------------------------------- */
+.scroll-bottom {
+  position: absolute;
+  top: -46px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+}
+.scroll-bottom:hover { color: var(--text); }
+
+/* ---- Sidebar: search, rename, per-item actions -------------------------- */
+.conv-search {
+  margin: 4px 12px 8px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+.conv-search::placeholder { color: var(--faint); }
+.conv-rename {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--coral);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 2px 6px;
+  outline: none;
+}
+.conv-actions { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity 0.12s ease; }
+.conv-item:hover .conv-actions, .conv-item.active .conv-actions { opacity: 1; }
+.conv-act {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--faint);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.conv-act:hover { color: var(--text); background: var(--surface); }
+
 .msg-meta {
   display: flex;
   align-items: center;

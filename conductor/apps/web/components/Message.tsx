@@ -62,11 +62,59 @@ function useCodeCopyButtons(deps: unknown[]) {
   return ref
 }
 
-export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }) {
+export function Message({
+  msg,
+  onInspect,
+  onEdit,
+  onRegenerate,
+}: {
+  msg: Msg
+  onInspect?: () => void
+  onEdit?: (id: string, content: string) => void
+  onRegenerate?: () => void
+}) {
   // Hook must run for every message (Rules of Hooks); the ref only binds below.
   const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
 
   if (msg.role === 'user') {
+    if (editing) {
+      return (
+        <div className="msg user">
+          <div className="edit-box">
+            <textarea
+              className="edit-area"
+              value={draft}
+              autoFocus
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setEditing(false)
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  onEdit?.(msg.id, draft)
+                  setEditing(false)
+                }
+              }}
+            />
+            <div className="edit-actions">
+              <button className="edit-cancel" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button
+                className="edit-send"
+                disabled={!draft.trim()}
+                onClick={() => {
+                  onEdit?.(msg.id, draft)
+                  setEditing(false)
+                }}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="msg user">
         <div className="bubble">
@@ -86,6 +134,20 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
           )}
           {msg.content && <span>{msg.content}</span>}
         </div>
+        {onEdit && (
+          <div className="user-actions">
+            <button
+              className="msg-action"
+              title="Edit & resend"
+              onClick={() => {
+                setDraft(msg.content)
+                setEditing(true)
+              }}
+            >
+              Edit
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -169,6 +231,11 @@ export function Message({ msg, onInspect }: { msg: Msg; onInspect?: () => void }
             {msg.decision.fallback && <span className="tag">fallback</span>}
             {msg.decision.overridden && <span className="tag">override</span>}
             {msg.content && <CopyButton text={msg.content} />}
+            {onRegenerate && (
+              <button className="msg-action" title="Regenerate reply" onClick={onRegenerate}>
+                Regenerate
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -45,12 +45,26 @@ export function loadConversation(id: string): StoredConversation | undefined {
 
 export function saveConversation(conv: StoredConversation) {
   const list = read().filter((c) => c.id !== conv.id)
-  // Strip transient fields before persisting.
+  // Strip transient fields and heavy base64 image data before persisting — full
+  // data URLs would quickly blow the ~5MB localStorage quota. We keep a marker
+  // so the attachment still shows as a file chip after reload.
   const messages = conv.messages
     .filter((m) => !m.pending)
-    .map((m) => ({ ...m, pending: false }))
+    .map((m) => ({
+      ...m,
+      pending: false,
+      attachments: m.attachments?.map((a) =>
+        a.kind === 'image' ? { ...a, dataUrl: undefined } : a
+      ),
+    }))
   list.push({ ...conv, messages })
   write(list)
+}
+
+export function renameConversation(id: string, title: string) {
+  const clean = title.trim().slice(0, 80)
+  if (!clean) return
+  write(read().map((c) => (c.id === id ? { ...c, title: clean } : c)))
 }
 
 export function deleteConversation(id: string) {
@@ -60,4 +74,18 @@ export function deleteConversation(id: string) {
 export function titleFrom(messages: Msg[]): string {
   const first = messages.find((m) => m.role === 'user')?.content || 'New conversation'
   return first.length > 48 ? first.slice(0, 48) + '…' : first
+}
+
+/** Render a conversation as portable Markdown for export/download. */
+export function conversationToMarkdown(conv: StoredConversation): string {
+  const lines: string[] = [`# ${conv.title}`, '']
+  for (const m of conv.messages) {
+    if (m.role === 'user') {
+      lines.push('**You:**', '', m.content || '_(attachment only)_', '')
+    } else {
+      const model = m.decision?.model?.label
+      lines.push(`**Conductor${model ? ` · ${model}` : ''}:**`, '', m.content || '', '')
+    }
+  }
+  return lines.join('\n').trim() + '\n'
 }
