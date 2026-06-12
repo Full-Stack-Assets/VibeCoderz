@@ -9,6 +9,7 @@ import {
   currentTime,
   webSearch,
   fetchUrl,
+  webEnabled,
   SimulatedExecutor,
 } from '../src/index.js';
 
@@ -61,6 +62,19 @@ test('web tools are simulated unless CONDUCTOR_WEB=live', async () => {
   assert.equal(f.ok, true);
   assert.match(f.output, /simulated/i);
 });
+
+test('web auto-enables on Vercel only with a Tavily backend; off-switch and force win', () => {
+  // Deployment + reliable backend → live automatically (no CONDUCTOR_WEB needed).
+  assert.equal(webEnabled({ VERCEL: '1', TAVILY_API_KEY: 'tvly-x' }), true)
+  assert.equal(webEnabled({ VERCEL_ENV: 'production', TAVILY_API_KEY: 'tvly-x' }), true)
+  // Deployment without a backend → stay simulated (avoids keyless 403 spam).
+  assert.equal(webEnabled({ VERCEL: '1' }), false)
+  // Explicit force opts into the keyless path anywhere; explicit off always wins.
+  assert.equal(webEnabled({ CONDUCTOR_WEB: 'live' }), true)
+  assert.equal(webEnabled({ VERCEL: '1', TAVILY_API_KEY: 'tvly-x', CONDUCTOR_WEB: 'off' }), false)
+  // No deployment signal and no flag → simulated.
+  assert.equal(webEnabled({}), false)
+})
 
 test('fetch_url refuses private hosts when live', async () => {
   const env = { CONDUCTOR_WEB: 'live' };
