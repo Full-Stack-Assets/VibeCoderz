@@ -28,7 +28,7 @@ import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { ShortcutsHelp } from './ShortcutsHelp'
-import { planById } from '@/lib/auth'
+import { planById, planCaps } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const SUGGESTIONS = [
@@ -530,6 +530,8 @@ export function Chat() {
                 preferModel={preferModel}
                 qualityFloor={qualityFloor}
                 routedLabel={routedLabel}
+                canPin={planCaps(user?.plan).allowPreferModel}
+                maxQualityFloor={planCaps(user?.plan).maxQualityFloor}
                 onChange={({ preferModel: pm, qualityFloor: qf }) => {
                   setPreferModel(pm)
                   setQualityFloor(qf)

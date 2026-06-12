@@ -8,6 +8,8 @@ import {
   makeSimulatedPlanner,
 } from '@conductor/agent-tools'
 import type { RouteDecision } from '@/lib/types'
+import { currentUser } from '@/lib/server/session'
+import { planLimits, sanitizeOverrides, usageStore } from '@/lib/server/plans'
 
 export const runtime = 'nodejs'
 
@@ -159,11 +161,20 @@ export async function POST(req: Request) {
   const messages = Array.isArray(body.messages) ? body.messages : []
   if (messages.length === 0) return new Response('no messages', { status: 400 })
 
+  // Server-authoritative plan enforcement. The client cannot pick its own
+  // budget (we track spend per account in the DB, not from the request) and
+  // cannot pin premium models or quality floors beyond what its plan allows.
+  const user = await currentUser(req)
+  if (!user) return new Response('Please sign in to chat.', { status: 401 })
+  const lim = planLimits(user.plan)
+  const periodMs = lim.periodDays * 24 * 60 * 60 * 1000
+  const meter = await usageStore()
+  const spentUSD = await meter.getUserUsage(user.id, periodMs)
+  const budgetUSD = lim.budgetUSD
+  const { preferModel, qualityFloor } = sanitizeOverrides(user.plan, body.preferModel, body.qualityFloor)
+
   const engineMessages = buildEngineMessages(messages)
   const hasImages = hasImageAttachment(messages)
-
-  const budgetUSD = Number(process.env.CONDUCTOR_BUDGET_USD || '1.0')
-  const spentUSD = Number(body.spentUSD || 0)
   const enc = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -177,18 +188,19 @@ export async function POST(req: Request) {
           messages: engineMessages,
           budgetUSD,
           spentUSD,
-          preferModel: body.preferModel,
-          qualityFloor: body.qualityFloor,
+          preferModel,
+          qualityFloor,
           hasImages,
         }) as RouteDecision
         send('decision', { decision })
 
         // 2) Budget guardrail.
         if (!decision.ok || !decision.model) {
+          const window = lim.periodDays === 1 ? 'today' : 'this month'
           const msg =
-            `**Budget guardrail engaged.** The orchestrator declined to route this turn — ` +
-            `${decision.reason}. The COO engine never breaches the session cap. Raise ` +
-            `\`CONDUCTOR_BUDGET_USD\` or start a new session to continue.`
+            `**You've reached your ${user.plan} plan's budget** ($${budgetUSD.toFixed(2)} ${window}). ` +
+            `The orchestrator won't spend past your cap. It resets ${lim.periodDays === 1 ? 'daily' : 'monthly'}` +
+            `${user.plan === 'max' ? '.' : ' — upgrade your plan for a higher budget and premium models.'}`
           for (const c of chunkText(msg)) {
             send('text', { delta: c })
             await sleep(8)
@@ -227,7 +239,8 @@ export async function POST(req: Request) {
           await sleep(simulated ? 14 : 6)
         }
 
-        // 5) Persist + close.
+        // 5) Meter the spend against the account, persist, and close.
+        const newSpent = await meter.addUserUsage(user.id, costUSD)
         const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
@@ -239,7 +252,7 @@ export async function POST(req: Request) {
         send('done', {
           costUSD,
           simulated,
-          spentUSD: Number((spentUSD + costUSD).toFixed(6)),
+          spentUSD: Number(newSpent.toFixed(6)),
           conversationId,
           stepCount: steps.length,
         })

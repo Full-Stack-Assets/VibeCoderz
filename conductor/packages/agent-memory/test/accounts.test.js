@@ -40,3 +40,14 @@ test('sessions resolve to their user and expire', async () => {
   await store.deleteSession('tok-1');
   assert.equal(await store.getSession('tok-1'), null);
 });
+
+test('usage metering accrues within a period and resets when it elapses', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 'meter@b.com', passwordHash: 'h' });
+  assert.equal(await store.getUserUsage(u.id, 100000), 0);
+  await store.addUserUsage(u.id, 0.5);
+  await store.addUserUsage(u.id, 0.25);
+  assert.equal(await store.getUserUsage(u.id, 100000), 0.75);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(await store.getUserUsage(u.id, 1), 0, 'elapsed period resets spend');
+});

@@ -80,6 +80,26 @@ export class InMemoryStore {
     return this.sessions.delete(token);
   }
 
+  // --- Per-account usage metering (server-authoritative budgets) ----------
+
+  async getUserUsage(userId, periodMs) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    const now = Date.now();
+    if (!u.spendPeriodStart || now - u.spendPeriodStart >= periodMs) {
+      u.spendPeriodStart = now;
+      u.spentUSD = 0;
+    }
+    return u.spentUSD || 0;
+  }
+
+  async addUserUsage(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.spentUSD = (u.spentUSD || 0) + (deltaUSD || 0);
+    return u.spentUSD;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
   // User-facing chat history, owned by an account and stored as an opaque
   // snapshot (the client's full conversation). Distinct from the runtime
