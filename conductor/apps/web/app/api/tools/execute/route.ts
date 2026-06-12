@@ -15,9 +15,9 @@ interface Body {
 }
 
 // Executes a single tool call in the configured sandbox. Simulated by default;
-// set CONDUCTOR_SANDBOX=local to run real (allowlisted) commands in an isolated
-// working directory. This is the same execution surface the COO-routed model
-// drives during a live agentic turn.
+// set CONDUCTOR_SANDBOX=vercel to run real commands in an isolated, ephemeral
+// Vercel Sandbox microVM (no access to app secrets). This is the same execution
+// surface the COO-routed model drives during a live agentic turn.
 export async function POST(req: Request) {
   let body: Body
   try {

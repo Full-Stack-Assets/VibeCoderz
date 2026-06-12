@@ -133,22 +133,28 @@ async function runAgentic(
   messages: EngineMessage[],
   onStep: (step: ToolStep) => void
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
-  const registry = new ToolRegistry({ executor: getExecutor() })
-  const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
-  if (livePlanner) {
-    try {
-      const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep })) as {
-        text: string
-        steps: ToolStep[]
+  const executor = getExecutor()
+  const registry = new ToolRegistry({ executor })
+  try {
+    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
+    if (livePlanner) {
+      try {
+        const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep })) as {
+          text: string
+          steps: ToolStep[]
+        }
+        return { ...out, simulated: false }
+      } catch {
+        // fall through to simulation on any live-path error
       }
-      return { ...out, simulated: false }
-    } catch {
-      // fall through to simulation on any live-path error
     }
+    const planner = makeSimulatedPlanner(messages) as unknown as Planner
+    const out = (await runAgenticTurn({ planner, registry, onStep })) as { text: string; steps: ToolStep[] }
+    return { ...out, simulated: true }
+  } finally {
+    // Stop the sandbox microVM (if the executor created one) after the turn.
+    await (executor as { dispose?: () => Promise<void> }).dispose?.()
   }
-  const planner = makeSimulatedPlanner(messages) as unknown as Planner
-  const out = (await runAgenticTurn({ planner, registry, onStep })) as { text: string; steps: ToolStep[] }
-  return { ...out, simulated: true }
 }
 
 export async function POST(req: Request) {
