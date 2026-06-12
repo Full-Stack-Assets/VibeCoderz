@@ -5,8 +5,9 @@
  * terminal), this store runs `CREATE TABLE IF NOT EXISTS` on first use, so the
  * only operator step is setting DATABASE_URL — no CLI, no migration files. It
  * implements the same interface as InMemoryStore, so the factory swaps it in
- * transparently. The `pg` driver is lazy-imported (non-literal specifier) so the
- * package still builds and unit-tests with no `pg` dependency or database.
+ * transparently. The `pg` driver is imported lazily (only when DATABASE_URL is
+ * set) so unit tests run without a database; the specifier stays literal so
+ * bundlers and Vercel's file tracing include the driver in server bundles.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -99,8 +100,12 @@ export class PgStore {
 
   /** Connect, ensure the schema exists, and return a ready store. */
   static async create() {
-    const spec = ['p', 'g'].join(''); // defeat bundler static analysis
-    const pg = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ spec);
+    // Literal specifier on purpose: `pg` is a declared dependency, and the
+    // import must stay statically analyzable so Vercel's file tracing bundles
+    // the driver into each serverless function. (An obfuscated specifier made
+    // tracing miss it → import failed at runtime → silent in-memory fallback →
+    // sessions/users differed per lambda instance.)
+    const pg = await import('pg');
     const { Pool } = pg.default ?? pg;
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig() });
     await pool.query(SCHEMA);
