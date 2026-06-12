@@ -29,14 +29,8 @@ import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { ShortcutsHelp } from './ShortcutsHelp'
 import { planById, planCaps, TOPUP_PACKS } from '@/lib/auth'
+import { rotatingSuggestions, rotationWindow } from '@/lib/suggestions'
 import { useFocusTrap } from '@/lib/useFocusTrap'
-
-const SUGGESTIONS = [
-  'Search the web for the latest on the EU AI Act and cite sources',
-  'Analyze this CSV and find the outliers',
-  'What’s in this screenshot? (attach an image)',
-  'Design a fault-tolerant job queue, then draft the README',
-]
 
 const TEXT_EXT = /\.(csv|tsv|txt|md|json|log|ya?ml)$/i
 const MAX_ATTACH_BYTES = 5 * 1024 * 1024 // 5 MB per file
@@ -98,6 +92,7 @@ export function Chat() {
   const [atBottom, setAtBottom] = useState(true)
   const [capReached, setCapReached] = useState(false)
   const [toppingUp, setToppingUp] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<string[]>(() => rotatingSuggestions())
 
   const convRef = useRef<HTMLDivElement>(null)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -117,6 +112,20 @@ export function Chat() {
   // Keep the live credit balance in sync with the account (updated again after
   // each turn via the stream's `done` event, and after returning from Stripe).
   useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
+  // Re-deal the starter prompts when the rotation window rolls over, so even a
+  // tab left open gets fresh suggestions (a minutely index check, no re-render
+  // unless the window actually changed).
+  useEffect(() => {
+    let win = rotationWindow()
+    const id = setInterval(() => {
+      const next = rotationWindow()
+      if (next !== win) {
+        win = next
+        setSuggestions(rotatingSuggestions())
+      }
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [])
   useEffect(() => {
     let alive = true
     fetch('/api/models')
@@ -650,7 +659,7 @@ export function Chat() {
                   and you can see exactly why.
                 </p>
                 <div className="suggestions">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button key={s} className="chip" onClick={() => send(s)}>
                       {s}
                     </button>
