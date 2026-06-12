@@ -87,6 +87,7 @@ export function Chat() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
+  const [credit, setCredit] = useState(0)
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
@@ -113,6 +114,9 @@ export function Chat() {
   const mounted = useRef(false)
 
   useEffect(() => setConversations(listConversations()), [])
+  // Keep the live credit balance in sync with the account (updated again after
+  // each turn via the stream's `done` event, and after returning from Stripe).
+  useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
   useEffect(() => {
     let alive = true
     fetch('/api/models')
@@ -303,6 +307,7 @@ export function Chat() {
               costUSD: data.costUSD as number,
             }))
             setSpent(data.spentUSD as number)
+            if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
             if (data.capReached) setCapReached(true)
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
@@ -773,6 +778,11 @@ export function Chat() {
                     ${spent.toFixed(4)} / ${budgetCap.toFixed(2)}
                     {budgetUtil >= 0.85 ? ' · near cap' : ''}
                   </span>
+                  {credit > 0 && (
+                    <span className="cb-credit" title="Pay-as-you-go top-up credit (rolls over)">
+                      +${credit.toFixed(2)} credit
+                    </span>
+                  )}
                 </div>
               )}
             </div>

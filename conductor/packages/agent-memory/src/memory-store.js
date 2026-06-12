@@ -35,6 +35,7 @@ export class InMemoryStore {
       role,
       stripeCustomerId: null,
       subscriptionStatus: null,
+      topupUSD: 0,
       createdAt: Date.now(),
     };
     this.users.set(user.id, user);

@@ -15,6 +15,7 @@ export interface DBUser {
   role: 'user' | 'admin'
   stripeCustomerId: string | null
   subscriptionStatus: string | null
+  topupUSD: number
   createdAt: number | Date
 }
 
@@ -47,10 +48,19 @@ export interface PublicUser {
   plan: PlanId
   role: 'user' | 'admin'
   subscriptionStatus: string | null
+  topupUSD: number
 }
 
 export function toPublicUser(u: DBUser): PublicUser {
-  return { id: u.id, email: u.email, name: u.name, plan: u.plan, role: u.role, subscriptionStatus: u.subscriptionStatus }
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    plan: u.plan,
+    role: u.role,
+    subscriptionStatus: u.subscriptionStatus,
+    topupUSD: u.topupUSD ?? 0,
+  }
 }
 
 /** Read our session token from a request's Cookie header. */

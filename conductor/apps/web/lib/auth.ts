@@ -65,6 +65,8 @@ export interface User {
   plan: PlanId
   role: 'user' | 'admin'
   subscriptionStatus: string | null
+  /** Remaining pay-as-you-go top-up credit (USD). */
+  topupUSD: number
 }
 
 /**

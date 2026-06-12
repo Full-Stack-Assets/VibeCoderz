@@ -212,7 +212,7 @@ export async function POST(req: Request) {
             await sleep(8)
           }
           // capReached tells the client to surface the top-up ladder.
-          send('done', { costUSD: 0, simulated: true, spentUSD, capReached: true, conversationId: body.conversationId })
+          send('done', { costUSD: 0, simulated: true, spentUSD, topupUSD, capReached: true, conversationId: body.conversationId })
           controller.close()
           return
         }
@@ -251,7 +251,7 @@ export async function POST(req: Request) {
         // plan cap and purchased credit is consumed only once it's needed.
         const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
         const newSpent = await meter.addUserUsage(user.id, fromPlan)
-        if (fromTopup > 0) await meter.addUserCredit(user.id, -fromTopup)
+        const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
         const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
@@ -264,6 +264,7 @@ export async function POST(req: Request) {
           costUSD,
           simulated,
           spentUSD: Number(newSpent.toFixed(6)),
+          topupUSD: Number(newCredit.toFixed(6)),
           conversationId,
           stepCount: steps.length,
         })
