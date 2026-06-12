@@ -40,11 +40,32 @@ export function sanitizeOverrides(
   }
 }
 
+/**
+ * Split a turn's cost across the plan allowance and rolled-over top-up credit.
+ * The plan allowance is charged first (so `spent` never exceeds the plan cap);
+ * any overflow is drawn from purchased credit. Pure + deterministic so the
+ * money math is unit-tested independently of the streaming route.
+ */
+export function chargeSplit(
+  planBudgetUSD: number,
+  spentUSD: number,
+  costUSD: number
+): { fromPlan: number; fromTopup: number } {
+  const planRoom = Math.max(0, planBudgetUSD - spentUSD)
+  const fromPlan = Math.min(Math.max(0, costUSD), planRoom)
+  const fromTopup = Math.max(0, Math.max(0, costUSD) - fromPlan)
+  return { fromPlan, fromTopup }
+}
+
 export interface UsageStore {
   /** Current spend for the active period; resets the period if it has elapsed. */
   getUserUsage(userId: string, periodMs: number): Promise<number>
   /** Add metered cost to the user's running spend; returns the new total. */
   addUserUsage(userId: string, deltaUSD: number): Promise<number>
+  /** Purchased top-up credit balance (rolls over; never resets with the period). */
+  getUserCredit(userId: string): Promise<number>
+  /** Add (or, with a negative delta, consume) top-up credit; floors at 0. */
+  addUserCredit(userId: string, deltaUSD: number): Promise<number>
 }
 
 export async function usageStore(): Promise<UsageStore> {

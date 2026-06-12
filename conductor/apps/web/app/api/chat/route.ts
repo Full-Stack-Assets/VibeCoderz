@@ -9,7 +9,7 @@ import {
 } from '@conductor/agent-tools'
 import type { RouteDecision } from '@/lib/types'
 import { currentUser } from '@/lib/server/session'
-import { planLimits, sanitizeOverrides, usageStore } from '@/lib/server/plans'
+import { chargeSplit, planLimits, sanitizeOverrides, usageStore } from '@/lib/server/plans'
 
 export const runtime = 'nodejs'
 
@@ -170,7 +170,12 @@ export async function POST(req: Request) {
   const periodMs = lim.periodDays * 24 * 60 * 60 * 1000
   const meter = await usageStore()
   const spentUSD = await meter.getUserUsage(user.id, periodMs)
-  const budgetUSD = lim.budgetUSD
+  // Effective budget = plan allowance + any purchased top-up credit. Plan
+  // allowance resets each period; top-up credit rolls over and is consumed only
+  // once the plan allowance is used up (see the split metering in step 5).
+  const planBudgetUSD = lim.budgetUSD
+  const topupUSD = await meter.getUserCredit(user.id)
+  const budgetUSD = planBudgetUSD + topupUSD
   const { preferModel, qualityFloor } = sanitizeOverrides(user.plan, body.preferModel, body.qualityFloor)
 
   const engineMessages = buildEngineMessages(messages)
@@ -197,15 +202,17 @@ export async function POST(req: Request) {
         // 2) Budget guardrail.
         if (!decision.ok || !decision.model) {
           const window = lim.periodDays === 1 ? 'today' : 'this month'
+          const resetWord = lim.periodDays === 1 ? 'daily' : 'monthly'
           const msg =
-            `**You've reached your ${user.plan} plan's budget** ($${budgetUSD.toFixed(2)} ${window}). ` +
-            `The orchestrator won't spend past your cap. It resets ${lim.periodDays === 1 ? 'daily' : 'monthly'}` +
-            `${user.plan === 'max' ? '.' : ' — upgrade your plan for a higher budget and premium models.'}`
+            `**You've reached your ${user.plan} plan's budget** ($${planBudgetUSD.toFixed(2)} ${window}). ` +
+            `The orchestrator won't spend past your cap. It resets ${resetWord} — or **add credits** below to ` +
+            `keep going right now${user.plan === 'max' ? '.' : ', or upgrade for a higher monthly allowance and premium models.'}`
           for (const c of chunkText(msg)) {
             send('text', { delta: c })
             await sleep(8)
           }
-          send('done', { costUSD: 0, simulated: true, spentUSD, conversationId: body.conversationId })
+          // capReached tells the client to surface the top-up ladder.
+          send('done', { costUSD: 0, simulated: true, spentUSD, capReached: true, conversationId: body.conversationId })
           controller.close()
           return
         }
@@ -239,8 +246,12 @@ export async function POST(req: Request) {
           await sleep(simulated ? 14 : 6)
         }
 
-        // 5) Meter the spend against the account, persist, and close.
-        const newSpent = await meter.addUserUsage(user.id, costUSD)
+        // 5) Meter the spend: charge the plan allowance first, then draw any
+        // overflow from rolled-over top-up credit so spent never exceeds the
+        // plan cap and purchased credit is consumed only once it's needed.
+        const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
+        const newSpent = await meter.addUserUsage(user.id, fromPlan)
+        if (fromTopup > 0) await meter.addUserCredit(user.id, -fromTopup)
         const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,

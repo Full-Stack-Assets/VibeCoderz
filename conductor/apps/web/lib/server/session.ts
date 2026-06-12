@@ -32,6 +32,8 @@ export interface AuthStore {
   createSession(userId: string, token: string, expiresAt: number): Promise<unknown>
   getSession(token: string): Promise<{ user: DBUser } | null>
   deleteSession(token: string): Promise<unknown>
+  /** Grant top-up routing credit (e.g. from a completed Stripe payment). */
+  addUserCredit(userId: string, deltaUSD: number): Promise<number>
 }
 
 export async function authStore(): Promise<AuthStore> {

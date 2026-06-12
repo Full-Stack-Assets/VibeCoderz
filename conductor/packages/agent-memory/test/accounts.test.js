@@ -51,3 +51,23 @@ test('usage metering accrues within a period and resets when it elapses', async 
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(await store.getUserUsage(u.id, 1), 0, 'elapsed period resets spend');
 });
+
+test('top-up credit accrues, is consumed, floors at 0, and survives a period reset', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 'credit@b.com', passwordHash: 'h' });
+  assert.equal(await store.getUserCredit(u.id), 0, 'starts empty');
+
+  assert.equal(await store.addUserCredit(u.id, 8), 8, 'a $10 pack grants $8');
+  await store.addUserCredit(u.id, 20); // a second pack
+  assert.equal(await store.getUserCredit(u.id), 28);
+
+  // Consuming overflow (negative delta) draws the balance down.
+  assert.equal(await store.addUserCredit(u.id, -3), 25);
+  // Never goes negative even if a charge exceeds the balance.
+  assert.equal(await store.addUserCredit(u.id, -100), 0, 'floors at 0');
+
+  // Credit is independent of the spend period: spend can reset without touching it.
+  await store.addUserCredit(u.id, 5);
+  await store.getUserUsage(u.id, 1); // force a period reset
+  assert.equal(await store.getUserCredit(u.id), 5, 'top-up credit rolls over');
+});
