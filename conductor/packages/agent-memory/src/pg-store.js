@@ -101,6 +101,7 @@ const mapUser = (r) =>
     role: r.role,
     stripeCustomerId: r.stripe_customer_id,
     subscriptionStatus: r.subscription_status,
+    topupUSD: Number(r.topup_credit_usd) || 0,
     createdAt: Number(r.created_at),
   };
 
