@@ -56,6 +56,7 @@ export default function RootLayout({
           <Toaster />
           <CommandLogsStream />
           <SandboxState />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
