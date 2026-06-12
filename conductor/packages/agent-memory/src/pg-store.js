@@ -17,9 +17,13 @@ const id = (p) => `${p}_${randomUUID()}`;
 function sslConfig() {
   const url = process.env.DATABASE_URL || '';
   // Local databases usually don't use TLS; managed providers (Neon/Supabase/
-  // Vercel) require it. Default to permissive TLS off-localhost.
+  // Vercel) require it. Use FULLY VERIFIED TLS by default — managed providers
+  // present publicly-trusted certs, and disabling verification makes `pg` log
+  // a security warning on every connection (and is a real MITM risk). For the
+  // rare self-signed provider, opt out explicitly with PG_SSL_INSECURE=1.
   if (/@(localhost|127\.0\.0\.1)/.test(url) && !/sslmode=require/.test(url)) return false;
-  return { rejectUnauthorized: false };
+  if (process.env.PG_SSL_INSECURE === '1') return { rejectUnauthorized: false };
+  return true;
 }
 
 const SCHEMA = `
