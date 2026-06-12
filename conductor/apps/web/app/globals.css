@@ -1281,6 +1281,15 @@ kbd {
 .cb-fill.crit { background: var(--coral-press); }
 .cb-label { font-size: 11px; color: var(--faint); font-family: var(--font-mono); white-space: nowrap; }
 
+/* Top-up ladder — shown when a turn is blocked by the budget cap */
+.topup-bar { width: 100%; max-width: 720px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 0; padding: 8px 12px; background: var(--coral-tint); border: 1px solid var(--coral-press); border-radius: var(--radius-sm); }
+.topup-label { font-size: 12px; color: var(--coral-press); font-weight: 600; }
+.topup-packs { display: flex; gap: 6px; margin-left: auto; }
+.topup-pack { display: inline-flex; align-items: baseline; gap: 4px; font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 5px 10px; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+.topup-pack:hover:not(:disabled) { border-color: var(--green); background: var(--surface-raise); }
+.topup-pack:disabled { opacity: 0.6; cursor: progress; }
+.topup-credit { font-size: 10px; color: var(--green); font-weight: 700; }
+
 /* Plan gating in the routing popover */
 .rc-upsell { font-size: 12px; color: var(--coral-press); background: var(--coral-tint); border-radius: var(--radius-xs); padding: 7px 10px; margin: 0 0 8px; line-height: 1.4; }
 .rc-model.locked, .rc-floor.locked { opacity: 0.5; cursor: not-allowed; }

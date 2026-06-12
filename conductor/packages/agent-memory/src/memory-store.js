@@ -100,6 +100,20 @@ export class InMemoryStore {
     return u.spentUSD;
   }
 
+  // --- Top-up credit (purchased, rolls over across periods) ---------------
+
+  async getUserCredit(userId) {
+    const u = this.users.get(userId);
+    return u ? u.topupUSD || 0 : 0;
+  }
+
+  async addUserCredit(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.topupUSD = Math.max(0, (u.topupUSD || 0) + (deltaUSD || 0));
+    return u.topupUSD;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
   // User-facing chat history, owned by an account and stored as an opaque
   // snapshot (the client's full conversation). Distinct from the runtime

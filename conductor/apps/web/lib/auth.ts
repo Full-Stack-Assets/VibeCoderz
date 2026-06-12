@@ -84,5 +84,26 @@ export const PLAN_CAPS: Record<PlanId, PlanCaps> = {
 }
 export const planCaps = (plan: PlanId | undefined): PlanCaps => PLAN_CAPS[plan ?? 'free'] ?? PLAN_CAPS.free
 
+/**
+ * Pay-as-you-go top-up ladder. When a user exhausts their plan budget, they can
+ * buy more routing credit instead of waiting for the period to reset. `priceUSD`
+ * is what they pay; `creditUSD` is the routing budget it grants (a 20% margin —
+ * tune the ratio here, in one place). Credit rolls over and never expires. This
+ * is client-safe metadata; the server (lib/server/stripe.ts) is authoritative on
+ * price → credit so the amount can't be tampered with from the browser.
+ */
+export interface TopupPack {
+  id: string
+  priceUSD: number
+  creditUSD: number
+}
+export const TOPUP_PACKS: TopupPack[] = [
+  { id: 'topup_10', priceUSD: 10, creditUSD: 8 },
+  { id: 'topup_25', priceUSD: 25, creditUSD: 20 },
+  { id: 'topup_50', priceUSD: 50, creditUSD: 40 },
+]
+export const topupPack = (id: string | undefined): TopupPack | undefined =>
+  TOPUP_PACKS.find((p) => p.id === id)
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isValidEmail = (e: string) => EMAIL_RE.test(e.trim())

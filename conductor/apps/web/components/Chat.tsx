@@ -28,7 +28,7 @@ import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { ShortcutsHelp } from './ShortcutsHelp'
-import { planById, planCaps } from '@/lib/auth'
+import { planById, planCaps, TOPUP_PACKS } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const SUGGESTIONS = [
@@ -67,7 +67,7 @@ interface AuditItem {
 }
 
 export function Chat() {
-  const { user, logout } = useAuth()
+  const { user, logout, startTopup, billing } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
   // Stable handle to the current account id for fire-and-forget cloud sync.
@@ -95,6 +95,8 @@ export function Chat() {
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [atBottom, setAtBottom] = useState(true)
+  const [capReached, setCapReached] = useState(false)
+  const [toppingUp, setToppingUp] = useState<string | null>(null)
 
   const convRef = useRef<HTMLDivElement>(null)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -238,6 +240,7 @@ export function Chat() {
       const last = history[history.length - 1]
       if (!last || last.role !== 'user') return
       setSending(true)
+      setCapReached(false)
 
       const cid = currentId ?? convId()
       if (!currentId) setCurrentId(cid)
@@ -300,6 +303,7 @@ export function Chat() {
               costUSD: data.costUSD as number,
             }))
             setSpent(data.spentUSD as number)
+            if (data.capReached) setCapReached(true)
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
           }
@@ -357,6 +361,21 @@ export function Chat() {
       await runTurn(history)
     },
     [attachments, sending, runTurn]
+  )
+
+  // Buy a top-up credit pack — redirect to Stripe Checkout.
+  const buyTopup = useCallback(
+    async (packId: string) => {
+      if (toppingUp) return
+      setToppingUp(packId)
+      try {
+        window.location.href = await startTopup(packId)
+      } catch (e) {
+        setToppingUp(null)
+        alert((e as Error).message)
+      }
+    },
+    [toppingUp, startTopup]
   )
 
   // Re-run the most recent user turn, replacing the assistant reply.
@@ -722,6 +741,26 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              {capReached && billing.enabled && (
+                <div className="topup-bar" role="region" aria-label="Add routing credit">
+                  <span className="topup-label">Out of budget — add credit to keep going:</span>
+                  <div className="topup-packs">
+                    {TOPUP_PACKS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="topup-pack"
+                        disabled={!!toppingUp}
+                        onClick={() => buyTopup(p.id)}
+                        title={`Pay $${p.priceUSD} for $${p.creditUSD} of routing credit (rolls over)`}
+                      >
+                        {toppingUp === p.id ? '…' : `$${p.priceUSD}`}
+                        <span className="topup-credit">+${p.creditUSD}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {budgetCap && (
                 <div className="composer-budget" title="Session budget — turns throttle near the cap">
                   <div className="cb-bar">

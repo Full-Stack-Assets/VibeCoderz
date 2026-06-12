@@ -49,11 +49,13 @@ CREATE TABLE IF NOT EXISTS users (
   subscription_status text,
   spent_usd double precision NOT NULL DEFAULT 0,
   spend_period_start bigint NOT NULL DEFAULT 0,
+  topup_credit_usd double precision NOT NULL DEFAULT 0,
   created_at bigint NOT NULL
 );
 -- Backfill columns on databases created before usage metering existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -331,5 +333,20 @@ export class PgStore {
       [userId, deltaUSD || 0]
     );
     return rows[0] ? Number(rows[0].spent_usd) : 0;
+  }
+
+  // --- Top-up credit (purchased, rolls over across periods) ---------------
+
+  async getUserCredit(userId) {
+    const { rows } = await this.q(`SELECT topup_credit_usd FROM users WHERE id = $1`, [userId]);
+    return rows[0] ? Number(rows[0].topup_credit_usd) || 0 : 0;
+  }
+
+  async addUserCredit(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET topup_credit_usd = GREATEST(0, topup_credit_usd + $2) WHERE id = $1 RETURNING topup_credit_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].topup_credit_usd) : 0;
   }
 }

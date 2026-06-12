@@ -24,7 +24,9 @@ function Gate() {
   // via webhook) and clean the URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has('checkout')) {
+    // checkout → plan may have changed; topup → credit may have been granted.
+    // Both are applied by the Stripe webhook; refresh to pick them up.
+    if (params.has('checkout') || params.has('topup')) {
       void refresh()
       window.history.replaceState({}, '', window.location.pathname)
     }
