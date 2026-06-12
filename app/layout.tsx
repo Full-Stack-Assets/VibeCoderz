@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 const title = 'OSS Vibe Coding Platform'
@@ -57,6 +58,7 @@ export default function RootLayout({
           <CommandLogsStream />
           <SandboxState />
           <Analytics />
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>
