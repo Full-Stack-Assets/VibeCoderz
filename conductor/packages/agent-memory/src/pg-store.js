@@ -14,12 +14,27 @@ import { randomUUID } from 'node:crypto';
 
 const id = (p) => `${p}_${randomUUID()}`;
 
-function sslConfig() {
-  const url = process.env.DATABASE_URL || '';
-  // Local databases usually don't use TLS; managed providers (Neon/Supabase/
-  // Vercel) require it. Default to permissive TLS off-localhost.
-  if (/@(localhost|127\.0\.0\.1)/.test(url) && !/sslmode=require/.test(url)) return false;
-  return { rejectUnauthorized: false };
+/**
+ * Connection config with sane, quiet TLS:
+ * - `sslmode=prefer|require|verify-ca` in the URL are normalized to
+ *   `verify-full` — that's what pg treats them as today anyway, and naming it
+ *   explicitly pins the stronger semantics AND silences pg's per-connection
+ *   "SECURITY WARNING" deprecation notice about the aliases.
+ * - No sslmode + localhost → plain TCP; no sslmode + remote → verified TLS.
+ * - Self-signed providers can opt out explicitly with PG_SSL_INSECURE=1.
+ */
+function connectionConfig() {
+  let connectionString = process.env.DATABASE_URL || '';
+  if (process.env.PG_SSL_INSECURE === '1') {
+    return { connectionString, ssl: { rejectUnauthorized: false } };
+  }
+  connectionString = connectionString.replace(
+    /([?&])sslmode=(prefer|require|verify-ca)(?=&|$)/,
+    '$1sslmode=verify-full'
+  );
+  if (/[?&]sslmode=/.test(connectionString)) return { connectionString };
+  if (/@(localhost|127\.0\.0\.1)/.test(connectionString)) return { connectionString, ssl: false };
+  return { connectionString, ssl: true };
 }
 
 const SCHEMA = `
@@ -112,7 +127,7 @@ export class PgStore {
     // sessions/users differed per lambda instance.)
     const pg = await import('pg');
     const { Pool } = pg.default ?? pg;
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig() });
+    const pool = new Pool(connectionConfig());
     await pool.query(SCHEMA);
     return new PgStore(pool);
   }

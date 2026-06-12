@@ -29,19 +29,19 @@ export const PLANS: Plan[] = [
     price: '$0',
     period: 'forever',
     tagline: 'Cost-optimized routing on a daily budget.',
-    features: ['Smart model routing', '$1.00 daily budget', 'Web & data tools', 'Image understanding'],
+    features: ['Smart model routing', 'Generous daily free usage', 'Web & data tools', 'Image understanding'],
   },
   {
     id: 'pro',
     name: 'Pro',
     price: '$20',
     period: '/month',
-    tagline: 'More budget and premium models when they earn it.',
+    tagline: 'More headroom and premium models when they earn it.',
     features: [
       'Everything in Free',
-      '$25 monthly budget',
+      'High monthly usage limit',
       'Premium models (Opus, GPT-5.3)',
-      'Priority routing',
+      'Pin any model · priority routing',
       'Unlimited conversations',
     ],
     highlight: true,
@@ -51,8 +51,8 @@ export const PLANS: Plan[] = [
     name: 'Max',
     price: '$100',
     period: '/month',
-    tagline: 'Highest budget and quality floor for heavy use.',
-    features: ['Everything in Pro', '$150 monthly budget', 'Highest quality floor', 'Early access features'],
+    tagline: 'Highest usage limit and quality floor for heavy use.',
+    features: ['Everything in Pro', 'Highest usage limit', 'Highest quality floor', 'Early access features'],
   },
 ]
 
@@ -78,9 +78,9 @@ export interface PlanCaps {
   budgetLabel: string
 }
 export const PLAN_CAPS: Record<PlanId, PlanCaps> = {
-  free: { allowPreferModel: false, maxQualityFloor: 0.85, budgetLabel: '$1 / day' },
-  pro: { allowPreferModel: true, maxQualityFloor: 0.95, budgetLabel: '$25 / month' },
-  max: { allowPreferModel: true, maxQualityFloor: 1, budgetLabel: '$150 / month' },
+  free: { allowPreferModel: false, maxQualityFloor: 0.85, budgetLabel: '$0.20 / day' },
+  pro: { allowPreferModel: true, maxQualityFloor: 0.95, budgetLabel: '$10 / month' },
+  max: { allowPreferModel: true, maxQualityFloor: 1, budgetLabel: '$50 / month' },
 }
 export const planCaps = (plan: PlanId | undefined): PlanCaps => PLAN_CAPS[plan ?? 'free'] ?? PLAN_CAPS.free
 

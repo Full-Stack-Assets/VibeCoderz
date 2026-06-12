@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Full-Stack Assets — a margin-first AI product studio</title>
+<meta name="description" content="Full-Stack Assets builds focused, AI-native software with margin-first economics. Our flagship, VibeCoderz, routes every task to the most cost-effective capable model — frontier answers without frontier bills." />
+<meta property="og:title" content="Full-Stack Assets — a margin-first AI product studio" />
+<meta property="og:description" content="Frontier-model answers without the frontier-model bill. Meet VibeCoderz." />
+<meta property="og:type" content="website" />
+<style>
+  :root{
+    --bg:#0b0c10; --panel:#13151c; --panel2:#171a22; --line:#23262f;
+    --text:#f3f4f6; --muted:#9aa0ad; --faint:#6b7280;
+    --coral:#ff7a59; --indigo:#7c8bff; --green:#6ee7a8;
+    --grad:linear-gradient(120deg,#ff7a59,#7c8bff);
+    --radius:18px; --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,rgba(124,139,255,.16),transparent 60%),radial-gradient(900px 500px at 10% 0%,rgba(255,122,89,.12),transparent 55%),var(--bg);
+    color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* Nav */
+  nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(12px);
+    background:rgba(11,12,16,.7);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;gap:18px;height:62px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em}
+  .logo .mark{width:26px;height:26px;border-radius:8px;background:var(--grad);display:inline-block;
+    box-shadow:0 0 0 4px rgba(124,139,255,.12)}
+  .nav .links{margin-left:auto;display:flex;gap:22px;align-items:center}
+  .nav .links a{color:var(--muted);font-size:14.5px}
+  .nav .links a:hover{color:var(--text)}
+  .btn{display:inline-block;border-radius:999px;padding:10px 18px;font-weight:600;font-size:14.5px;border:1px solid transparent;cursor:pointer}
+  .btn.primary{background:var(--grad);color:#0b0c10}
+  .btn.ghost{border-color:var(--line);color:var(--text)}
+  .btn.ghost:hover{border-color:#39404e}
+
+  /* Hero */
+  header.hero{padding:78px 0 30px;text-align:center}
+  .eyebrow{display:inline-block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:22px}
+  h1{font-size:clamp(34px,5.4vw,60px);line-height:1.05;letter-spacing:-.02em;margin:0 0 18px;font-weight:800}
+  .hero p.lede{font-size:clamp(17px,2.2vw,21px);color:var(--muted);max-width:680px;margin:0 auto 28px}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .hero .note{margin-top:14px;font-size:13px;color:var(--faint)}
+
+  /* Stat strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:54px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px;text-align:center}
+  .stat .n{font-size:30px;font-weight:800;letter-spacing:-.02em}
+  .stat .l{font-size:13px;color:var(--muted);margin-top:4px}
+
+  section{padding:56px 0}
+  .kicker{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--indigo);font-weight:700;margin-bottom:10px}
+  h2{font-size:clamp(26px,3.4vw,38px);letter-spacing:-.02em;margin:0 0 14px;font-weight:800}
+  section > .wrap > p.sub{color:var(--muted);max-width:680px;margin:0 0 30px;font-size:17px}
+
+  /* Product card */
+  .product{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:24px;padding:30px;display:grid;grid-template-columns:1.1fr 1fr;gap:28px;align-items:center}
+  .product h3{font-size:24px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  .pill{font-size:12px;font-weight:700;color:var(--green);border:1px solid rgba(110,231,168,.3);background:rgba(110,231,168,.08);border-radius:999px;padding:3px 10px}
+  .product ul{list-style:none;padding:0;margin:14px 0 0}
+  .product li{padding:7px 0;color:var(--muted);display:flex;gap:10px}
+  .product li b{color:var(--text);font-weight:600}
+  .product li::before{content:"";flex:0 0 auto;width:18px;height:18px;margin-top:3px;border-radius:6px;background:var(--grad);opacity:.9}
+  .receipt{background:#0e1016;border:1px solid var(--line);border-radius:16px;padding:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:var(--muted)}
+  .receipt .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1b1f29}
+  .receipt .row:last-child{border-bottom:none}
+  .receipt .k{color:var(--faint)} .receipt .v{color:var(--text)}
+  .receipt .save{color:var(--green)}
+
+  /* Steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .step .num{font-size:13px;font-weight:700;color:var(--indigo)}
+  .step h4{margin:8px 0 6px;font-size:17px}
+  .step p{margin:0;color:var(--muted);font-size:14.5px}
+
+  /* Pricing */
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tier{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:26px;display:flex;flex-direction:column}
+  .tier.featured{border-color:transparent;box-shadow:0 0 0 1.5px var(--indigo);background:linear-gradient(180deg,#161a26,var(--panel))}
+  .tier .name{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+  .tier .badge{font-size:11px;font-weight:700;color:#0b0c10;background:var(--grad);border-radius:999px;padding:2px 9px}
+  .tier .price{font-size:36px;font-weight:800;margin:10px 0 2px;letter-spacing:-.02em}
+  .tier .price span{font-size:15px;color:var(--muted);font-weight:500}
+  .tier .cap{font-size:13px;color:var(--faint);margin-bottom:14px}
+  .tier ul{list-style:none;padding:0;margin:0 0 20px;flex:1}
+  .tier li{padding:6px 0;color:var(--muted);font-size:14.5px}
+  .tier li::before{content:"✓";color:var(--green);font-weight:800;margin-right:8px}
+  .tier .btn{text-align:center}
+  .pricing-note{font-size:13px;color:var(--faint);margin-top:14px;text-align:center}
+
+  /* Studio / investor */
+  .studio{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:34px}
+  .studio .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:22px}
+  .studio h4{margin:0 0 6px;font-size:16px}
+  .studio p{margin:0;color:var(--muted);font-size:14.5px}
+
+  /* CTA */
+  .final{text-align:center;background:linear-gradient(120deg,rgba(255,122,89,.12),rgba(124,139,255,.14));border:1px solid var(--line);border-radius:24px;padding:48px 24px}
+  .final h2{margin-bottom:10px}
+  .final p{color:var(--muted);max-width:560px;margin:0 auto 22px}
+
+  footer{border-top:1px solid var(--line);padding:30px 0;color:var(--faint);font-size:14px}
+  .foot{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .foot .links{margin-left:auto;display:flex;gap:18px}
+  .foot a{color:var(--muted)} .foot a:hover{color:var(--text)}
+
+  @media(max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .product{grid-template-columns:1fr}
+    .steps,.tiers,.studio .grid{grid-template-columns:1fr}
+    .nav .links a:not(.btn){display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav">
+    <a class="logo" href="#top"><span class="mark"></span> Full-Stack&nbsp;Assets</a>
+    <div class="links">
+      <a href="#product">Product</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#studio">Studio</a>
+      <a class="btn primary" href="https://vibecoderz.app">Try VibeCoderz</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <span class="eyebrow">A margin-first AI product studio</span>
+    <h1>Frontier-model answers,<br><span class="grad">without the frontier bill.</span></h1>
+    <p class="lede">Full-Stack Assets builds focused, AI-native products with economics that work from day one. Our flagship, <b>VibeCoderz</b>, routes every task to the most cost-effective capable model — and shows its work.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://vibecoderz.app">Start free — no card</a>
+      <a class="btn ghost" href="https://vibecoderz.app/benchmark">See the benchmark</a>
+    </div>
+    <div class="note">Free tier · transparent per-turn cost · cancel anytime</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><div class="n grad">65%</div><div class="l">cheaper than always-Opus</div></div>
+    <div class="stat"><div class="n grad">99.5%</div><div class="l">of premium quality retained</div></div>
+    <div class="stat"><div class="n grad">5</div><div class="l">frontier models, auto-routed</div></div>
+    <div class="stat"><div class="n grad">100%</div><div class="l">of turns show the cost</div></div>
+  </div>
+</div>
+
+<section id="product">
+  <div class="wrap">
+    <div class="kicker">The flagship</div>
+    <h2>VibeCoderz — the AI that picks the right model for the job</h2>
+    <p class="sub">Stop paying Opus prices for Haiku questions. A constraint-optimized orchestrator scores every message and routes it to the cheapest model that can actually do it — then shows you exactly what happened.</p>
+    <div class="product">
+      <div>
+        <h3>VibeCoderz <span class="pill">live</span></h3>
+        <p class="muted">A general assistant — code, web research, data analysis, and images — with cost-optimized routing baked in.</p>
+        <ul>
+          <li><span><b>Cost-optimized routing.</b> The cheapest capable model, per turn, automatically.</span></li>
+          <li><span><b>Total transparency.</b> Model, reason, fit score, and live cost on every reply.</span></li>
+          <li><span><b>Budget you control.</b> A spend cap enforced server-side — no surprise bills.</span></li>
+          <li><span><b>Proven savings.</b> An open benchmark measures cost vs. quality.</span></li>
+        </ul>
+      </div>
+      <div class="receipt" aria-label="Example routing receipt">
+        <div class="row"><span class="k">prompt</span><span class="v">“summarize this PDF”</span></div>
+        <div class="row"><span class="k">routed to</span><span class="v">Grok 4.1 Reasoning</span></div>
+        <div class="row"><span class="k">reason</span><span class="v">low complexity · text</span></div>
+        <div class="row"><span class="k">fit score</span><span class="v">0.91</span></div>
+        <div class="row"><span class="k">cost</span><span class="v">$0.0008</span></div>
+        <div class="row"><span class="k">vs. always-Opus</span><span class="v save">−94%</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Three steps, zero babysitting</h2>
+    <div class="steps">
+      <div class="step"><div class="num">01</div><h4>You ask</h4><p>Debug code, research a topic, analyze a CSV, read a screenshot — anything.</p></div>
+      <div class="step"><div class="num">02</div><h4>The engine routes</h4><p>It scores the task on type, required quality, latency, and your remaining budget, then picks the cost-optimal model that clears the bar.</p></div>
+      <div class="step"><div class="num">03</div><h4>You see the receipt</h4><p>Which model ran, why, a fit score, and the exact cost — every single turn.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="kicker">Pricing</div>
+    <h2>Pay for outcomes, not overhead</h2>
+    <p class="sub">The router keeps your real spend well below your cap — so these are ceilings, not bills. Hit a cap? Top up. Never auto-charged past it.</p>
+    <div class="tiers">
+      <div class="tier">
+        <div class="name">Free</div>
+        <div class="price">$0</div>
+        <div class="cap">~$0.20 / day of routing</div>
+        <ul>
+          <li>Cost-optimized Auto routing</li>
+          <li>Web, data & image tools</li>
+          <li>Full cost transparency</li>
+        </ul>
+        <a class="btn ghost" href="https://vibecoderz.app">Start free</a>
+      </div>
+      <div class="tier featured">
+        <div class="name">Pro <span class="badge">Popular</span></div>
+        <div class="price">$20<span> / mo</span></div>
+        <div class="cap">~$10 / mo of routing</div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Premium models (Opus, GPT-5.x)</li>
+          <li>Pin any model · higher quality floor</li>
+          <li>Unlimited conversations</li>
+        </ul>
+        <a class="btn primary" href="https://vibecoderz.app">Go Pro</a>
+      </div>
+      <div class="tier">
+        <div class="name">Max</div>
+        <div class="price">$100<span> / mo</span></div>
+        <div class="cap">~$50 / mo of routing</div>
+        <ul>
+          <li>Everything in Pro</li>
+          <li>Highest quality floor</li>
+          <li>Priority routing</li>
+          <li>Early access features</li>
+        </ul>
+        <a class="btn ghost" href="https://vibecoderz.app">Go Max</a>
+      </div>
+    </div>
+    <div class="pricing-note">Need more? Top-ups unlock pay-as-you-go credits when you hit your cap.</div>
+  </div>
+</section>
+
+<section id="studio">
+  <div class="wrap">
+    <div class="kicker">The studio</div>
+    <h2>We don't bet on one model winning — we build the layer that profits from the spread</h2>
+    <div class="studio">
+      <p class="muted">Full-Stack Assets is a product studio building focused, AI-native software with margin-first economics. VibeCoderz is the flagship and the proof of the operating model: build fast, instrument the unit economics from day one, and price for margin.</p>
+      <div class="grid">
+        <div><h4>Why now</h4><p>Model prices and capabilities diverge weekly. A routing layer that arbitrages that gap compounds as the catalog grows.</p></div>
+        <div><h4>Defensibility</h4><p>The constraint-optimized engine plus accumulating routing/quality data — and transparency as a brand moat in a low-trust category.</p></div>
+        <div><h4>The playbook</h4><p>One sharp product, real economics, then replicate. VibeCoderz first; the studio model next.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="final">
+      <h2>See the savings on your own work.</h2>
+      <p>Start free, ask anything, and watch the cost on every reply. Upgrade only when you want to pin premium models.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://vibecoderz.app">Start free — no card</a>
+        <a class="btn ghost" href="mailto:nsalbertson26@gmail.com?subject=Full-Stack%20Assets%20%E2%80%94%20investing">Talk to the studio</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span class="logo"><span class="mark"></span> Full-Stack Assets</span>
+    <span class="faint">© 2026 Full-Stack Assets. Frontier answers, fair prices.</span>
+    <div class="links">
+      <a href="https://vibecoderz.app">VibeCoderz</a>
+      <a href="https://vibecoderz.app/benchmark">Benchmark</a>
+      <a href="mailto:nsalbertson26@gmail.com">Contact</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
