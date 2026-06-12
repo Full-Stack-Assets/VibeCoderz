@@ -64,11 +64,23 @@ test('capability gate: a high quality floor excludes the cheapest model', () => 
 });
 
 test('complete() simulates with no provider key and meters cost', async () => {
-  const r = await complete('xai/grok-4.1-fast-reasoning', {
-    messages: [{ role: 'user', content: 'hello' }],
-  });
-  assert.equal(r.simulated, true);
-  assert.equal(r.model, 'xai/grok-4.1-fast-reasoning');
-  assert.ok(r.text.includes('simulation'));
-  assert.ok(r.costUSD >= 0);
+  // Clear every credential (incl. a Vercel deployment's auto-injected
+  // VERCEL_OIDC_TOKEN) so this exercises the genuine no-key simulation path.
+  const KEYS = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'XAI_API_KEY', 'AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'OPENROUTER_API_KEY'];
+  const saved = {};
+  for (const k of KEYS) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  try {
+    const r = await complete('xai/grok-4.1-fast-reasoning', {
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+    assert.equal(r.simulated, true);
+    assert.equal(r.model, 'xai/grok-4.1-fast-reasoning');
+    assert.ok(r.text.includes('simulation'));
+    assert.ok(r.costUSD >= 0);
+  } finally {
+    for (const k of KEYS) if (saved[k] !== undefined) process.env[k] = saved[k];
+  }
 });
