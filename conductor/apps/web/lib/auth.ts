@@ -67,5 +67,22 @@ export interface User {
   subscriptionStatus: string | null
 }
 
+/**
+ * Client-safe mirror of the server's plan limits (lib/server/plans.ts) — used
+ * only to gate the UI. The server is always the source of truth; this just
+ * avoids showing controls a plan can't use.
+ */
+export interface PlanCaps {
+  allowPreferModel: boolean
+  maxQualityFloor: number
+  budgetLabel: string
+}
+export const PLAN_CAPS: Record<PlanId, PlanCaps> = {
+  free: { allowPreferModel: false, maxQualityFloor: 0.85, budgetLabel: '$1 / day' },
+  pro: { allowPreferModel: true, maxQualityFloor: 0.95, budgetLabel: '$25 / month' },
+  max: { allowPreferModel: true, maxQualityFloor: 1, budgetLabel: '$150 / month' },
+}
+export const planCaps = (plan: PlanId | undefined): PlanCaps => PLAN_CAPS[plan ?? 'free'] ?? PLAN_CAPS.free
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isValidEmail = (e: string) => EMAIL_RE.test(e.trim())

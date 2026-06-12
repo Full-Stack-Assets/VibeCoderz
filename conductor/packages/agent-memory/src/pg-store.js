@@ -32,8 +32,13 @@ CREATE TABLE IF NOT EXISTS users (
   role text NOT NULL DEFAULT 'user',
   stripe_customer_id text,
   subscription_status text,
+  spent_usd double precision NOT NULL DEFAULT 0,
+  spend_period_start bigint NOT NULL DEFAULT 0,
   created_at bigint NOT NULL
 );
+-- Backfill columns on databases created before usage metering existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -286,5 +291,30 @@ export class PgStore {
   async deleteSession(token) {
     await this.q(`DELETE FROM sessions WHERE token = $1`, [token]);
     return true;
+  }
+
+  // --- Per-account usage metering -----------------------------------------
+
+  async getUserUsage(userId, periodMs) {
+    const { rows } = await this.q(
+      `SELECT spent_usd, spend_period_start FROM users WHERE id = $1`,
+      [userId]
+    );
+    const r = rows[0];
+    if (!r) return 0;
+    const now = Date.now();
+    if (!Number(r.spend_period_start) || now - Number(r.spend_period_start) >= periodMs) {
+      await this.q(`UPDATE users SET spent_usd = 0, spend_period_start = $2 WHERE id = $1`, [userId, now]);
+      return 0;
+    }
+    return Number(r.spent_usd) || 0;
+  }
+
+  async addUserUsage(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET spent_usd = spent_usd + $2 WHERE id = $1 RETURNING spent_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].spent_usd) : 0;
   }
 }

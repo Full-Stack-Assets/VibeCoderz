@@ -1280,3 +1280,8 @@ kbd {
 .cb-fill.warn { background: #c9a227; }
 .cb-fill.crit { background: var(--coral-press); }
 .cb-label { font-size: 11px; color: var(--faint); font-family: var(--font-mono); white-space: nowrap; }
+
+/* Plan gating in the routing popover */
+.rc-upsell { font-size: 12px; color: var(--coral-press); background: var(--coral-tint); border-radius: var(--radius-xs); padding: 7px 10px; margin: 0 0 8px; line-height: 1.4; }
+.rc-model.locked, .rc-floor.locked { opacity: 0.5; cursor: not-allowed; }
+.rc-model.locked:hover { background: var(--surface); }
