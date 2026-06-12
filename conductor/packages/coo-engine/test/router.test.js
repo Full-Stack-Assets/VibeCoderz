@@ -21,7 +21,7 @@ test('routeTurn routes a coding turn to the code specialist', () => {
   });
   assert.equal(r.ok, true);
   assert.equal(r.model.type, 'code');
-  assert.equal(r.model.id, 'openai/gpt-5.5-codex');
+  assert.equal(r.model.id, 'openai/gpt-5.3-codex');
   assert.ok(r.score >= 0.55, 'score clears the admission threshold');
   assert.ok(r.estCostUSD > 0);
 });
@@ -51,7 +51,7 @@ test('manual override is honoured but records the optimizer choice', () => {
   });
   assert.equal(r.model.id, 'anthropic/claude-opus-4.8');
   assert.equal(r.overridden, true);
-  assert.equal(r.optimizerChoice, 'openai/gpt-5.5-codex');
+  assert.equal(r.optimizerChoice, 'openai/gpt-5.3-codex');
 });
 
 test('capability gate: a high quality floor excludes the cheapest model', () => {
@@ -64,11 +64,11 @@ test('capability gate: a high quality floor excludes the cheapest model', () => 
 });
 
 test('complete() simulates with no provider key and meters cost', async () => {
-  const r = await complete('xai/grok-4.3-fast-reasoning', {
+  const r = await complete('xai/grok-4.1-fast-reasoning', {
     messages: [{ role: 'user', content: 'hello' }],
   });
   assert.equal(r.simulated, true);
-  assert.equal(r.model, 'xai/grok-4.3-fast-reasoning');
+  assert.equal(r.model, 'xai/grok-4.1-fast-reasoning');
   assert.ok(r.text.includes('simulation'));
   assert.ok(r.costUSD >= 0);
 });

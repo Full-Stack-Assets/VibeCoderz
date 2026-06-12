@@ -20,48 +20,48 @@ Comparison of the **COO router** against pin-one-model baselines over a 30-task 
 
 | Domain | Tasks | COO quality | Premium quality | Retention | COO $ / task | Models COO used |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| coding | 6 | 97.4% | 97.6% | 99.8% | $0.01063 | openai/gpt-5.5-codex, google/gemini-3-pro |
-| reasoning | 5 | 97.6% | 98.2% | 99.3% | $0.01192 | google/gemini-3-pro, openai/gpt-5.5-codex |
+| coding | 6 | 97.4% | 97.6% | 99.8% | $0.01063 | openai/gpt-5.3-codex, google/gemini-3.1-pro-preview |
+| reasoning | 5 | 97.6% | 98.2% | 99.3% | $0.01192 | google/gemini-3.1-pro-preview, openai/gpt-5.3-codex |
 | writing | 5 | 99.0% | 99.1% | 99.8% | $0.01542 | anthropic/claude-sonnet-4.6 |
-| analysis | 4 | 98.5% | 98.9% | 99.6% | $0.00462 | xai/grok-4.3-fast-reasoning, google/gemini-3-pro |
-| research | 4 | 98.9% | 99.4% | 99.5% | $0.00206 | xai/grok-4.3-fast-reasoning |
-| data | 3 | 97.6% | 98.7% | 98.9% | $0.00206 | xai/grok-4.3-fast-reasoning |
-| vision | 3 | 99.1% | 99.6% | 99.5% | $0.01163 | google/gemini-3-pro, openai/gpt-5.5-codex |
+| analysis | 4 | 98.5% | 98.9% | 99.6% | $0.00462 | xai/grok-4.1-fast-reasoning, google/gemini-3.1-pro-preview |
+| research | 4 | 98.9% | 99.4% | 99.5% | $0.00206 | xai/grok-4.1-fast-reasoning |
+| data | 3 | 97.6% | 98.7% | 98.9% | $0.00206 | xai/grok-4.1-fast-reasoning |
+| vision | 3 | 99.1% | 99.6% | 99.5% | $0.01163 | google/gemini-3.1-pro-preview, openai/gpt-5.3-codex |
 
 ## How COO routed each task
 
 | Task | Domain | Routed model | Cost | Quality |
 | --- | --- | --- | ---: | ---: |
-| code-easy-1 | coding | openai/gpt-5.5-codex | $0.01027 | 100.0% |
-| code-easy-2 | coding | openai/gpt-5.5-codex | $0.01028 | 100.0% |
-| code-mid-1 | coding | openai/gpt-5.5-codex | $0.01028 | 100.0% |
-| code-mid-2 | coding | openai/gpt-5.5-codex | $0.01029 | 100.0% |
-| code-hard-1 | coding | openai/gpt-5.5-codex | $0.01030 | 94.0% |
-| code-hard-2 | coding | google/gemini-3-pro | $0.01233 | 90.4% |
-| reason-easy-1 | reasoning | google/gemini-3-pro | $0.01232 | 100.0% |
-| reason-mid-1 | reasoning | google/gemini-3-pro | $0.01232 | 100.0% |
-| reason-mid-2 | reasoning | openai/gpt-5.5-codex | $0.01029 | 100.0% |
-| reason-hard-1 | reasoning | google/gemini-3-pro | $0.01234 | 93.2% |
-| reason-hard-2 | reasoning | google/gemini-3-pro | $0.01233 | 94.8% |
+| code-easy-1 | coding | openai/gpt-5.3-codex | $0.01027 | 100.0% |
+| code-easy-2 | coding | openai/gpt-5.3-codex | $0.01028 | 100.0% |
+| code-mid-1 | coding | openai/gpt-5.3-codex | $0.01028 | 100.0% |
+| code-mid-2 | coding | openai/gpt-5.3-codex | $0.01029 | 100.0% |
+| code-hard-1 | coding | openai/gpt-5.3-codex | $0.01030 | 94.0% |
+| code-hard-2 | coding | google/gemini-3.1-pro-preview | $0.01233 | 90.4% |
+| reason-easy-1 | reasoning | google/gemini-3.1-pro-preview | $0.01232 | 100.0% |
+| reason-mid-1 | reasoning | google/gemini-3.1-pro-preview | $0.01232 | 100.0% |
+| reason-mid-2 | reasoning | openai/gpt-5.3-codex | $0.01029 | 100.0% |
+| reason-hard-1 | reasoning | google/gemini-3.1-pro-preview | $0.01234 | 93.2% |
+| reason-hard-2 | reasoning | google/gemini-3.1-pro-preview | $0.01233 | 94.8% |
 | write-easy-1 | writing | anthropic/claude-sonnet-4.6 | $0.01541 | 100.0% |
 | write-easy-2 | writing | anthropic/claude-sonnet-4.6 | $0.01540 | 100.0% |
 | write-mid-1 | writing | anthropic/claude-sonnet-4.6 | $0.01543 | 100.0% |
 | write-mid-2 | writing | anthropic/claude-sonnet-4.6 | $0.01544 | 100.0% |
 | write-hard-1 | writing | anthropic/claude-sonnet-4.6 | $0.01545 | 94.8% |
-| analysis-easy-1 | analysis | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| analysis-mid-1 | analysis | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| analysis-mid-2 | analysis | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| analysis-hard-1 | analysis | google/gemini-3-pro | $0.01233 | 94.0% |
-| research-easy-1 | research | xai/grok-4.3-fast-reasoning | $0.00205 | 100.0% |
-| research-mid-1 | research | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| research-mid-2 | research | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| research-hard-1 | research | xai/grok-4.3-fast-reasoning | $0.00206 | 95.6% |
-| data-easy-1 | data | xai/grok-4.3-fast-reasoning | $0.00206 | 100.0% |
-| data-mid-1 | data | xai/grok-4.3-fast-reasoning | $0.00206 | 98.8% |
-| data-hard-1 | data | xai/grok-4.3-fast-reasoning | $0.00206 | 94.0% |
-| vision-easy-1 | vision | google/gemini-3-pro | $0.01230 | 100.0% |
-| vision-mid-1 | vision | openai/gpt-5.5-codex | $0.01027 | 100.0% |
-| vision-hard-1 | vision | google/gemini-3-pro | $0.01232 | 97.2% |
+| analysis-easy-1 | analysis | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| analysis-mid-1 | analysis | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| analysis-mid-2 | analysis | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| analysis-hard-1 | analysis | google/gemini-3.1-pro-preview | $0.01233 | 94.0% |
+| research-easy-1 | research | xai/grok-4.1-fast-reasoning | $0.00205 | 100.0% |
+| research-mid-1 | research | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| research-mid-2 | research | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| research-hard-1 | research | xai/grok-4.1-fast-reasoning | $0.00206 | 95.6% |
+| data-easy-1 | data | xai/grok-4.1-fast-reasoning | $0.00206 | 100.0% |
+| data-mid-1 | data | xai/grok-4.1-fast-reasoning | $0.00206 | 98.8% |
+| data-hard-1 | data | xai/grok-4.1-fast-reasoning | $0.00206 | 94.0% |
+| vision-easy-1 | vision | google/gemini-3.1-pro-preview | $0.01230 | 100.0% |
+| vision-mid-1 | vision | openai/gpt-5.3-codex | $0.01027 | 100.0% |
+| vision-hard-1 | vision | google/gemini-3.1-pro-preview | $0.01232 | 97.2% |
 
 ## Method & honesty notes
 
