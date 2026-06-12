@@ -17,9 +17,11 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
-  free: { budgetUSD: 1, periodDays: 1, allowPreferModel: false, maxQualityFloor: 0.85 },
-  pro: { budgetUSD: 25, periodDays: 30, allowPreferModel: true, maxQualityFloor: 0.95 },
-  max: { budgetUSD: 150, periodDays: 30, allowPreferModel: true, maxQualityFloor: 1 },
+  // Caps are margin-safe ceilings (router keeps real spend well below them):
+  // Pro $20 → ≤$10 model spend ≈ 50% gross; Max $100 → ≤$50 ≈ 50% gross.
+  free: { budgetUSD: 0.2, periodDays: 1, allowPreferModel: false, maxQualityFloor: 0.85 },
+  pro: { budgetUSD: 10, periodDays: 30, allowPreferModel: true, maxQualityFloor: 0.95 },
+  max: { budgetUSD: 50, periodDays: 30, allowPreferModel: true, maxQualityFloor: 1 },
 }
 
 export const planLimits = (plan: PlanId): PlanLimits => PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
