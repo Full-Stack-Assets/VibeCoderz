@@ -27,6 +27,7 @@
     "@radix-ui/react-slot": "1.2.3",
     "@vercel/analytics": "^2.0.1",
     "@vercel/sandbox": "0.0.17",
+    "@vercel/speed-insights": "^2.0.0",
     "ai": "6.0.105",
     "arctic": "3.7.0",
     "botid": "1.4.5",
