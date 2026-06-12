@@ -28,8 +28,8 @@ export const MODEL_CATALOG = [
     blurb: 'Deepest reasoning, agentic & architecture. Premium tier. Sees images.',
   },
   {
-    id: 'openai/gpt-5.5-codex',
-    label: 'GPT-5.5 Codex',
+    id: 'openai/gpt-5.3-codex',
+    label: 'GPT-5.3 Codex',
     provider: 'openai',
     type: 'code',
     capability: 0.95,
@@ -52,8 +52,8 @@ export const MODEL_CATALOG = [
     blurb: 'Balanced workhorse — fast, capable, cheaper. Sees images.',
   },
   {
-    id: 'google/gemini-3-pro',
-    label: 'Gemini 3 Pro',
+    id: 'google/gemini-3.1-pro-preview',
+    label: 'Gemini 3.1 Pro',
     provider: 'google',
     type: 'reasoning',
     capability: 0.95,
@@ -64,8 +64,8 @@ export const MODEL_CATALOG = [
     blurb: 'Google’s multimodal reasoner, 1M+ context — cheaper than Opus.',
   },
   {
-    id: 'xai/grok-4.3-fast-reasoning',
-    label: 'Grok 4.3 Reasoning',
+    id: 'xai/grok-4.1-fast-reasoning',
+    label: 'Grok 4.1 Reasoning',
     provider: 'xai',
     type: 'analysis',
     capability: 0.89,
