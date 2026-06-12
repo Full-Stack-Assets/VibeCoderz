@@ -9,9 +9,10 @@ interface ToolResult {
   sandbox?: string
 }
 
-// A minimal window into the agent's sandbox: run an allowlisted command through
-// the same /api/tools/execute surface the COO-routed model uses during agentic
-// turns. Simulated by default; CONDUCTOR_SANDBOX=local runs it for real.
+// A minimal window into the agent's sandbox: run a command through the same
+// /api/tools/execute surface the COO-routed model uses during agentic turns.
+// Simulated by default; CONDUCTOR_SANDBOX=vercel runs it for real in an
+// isolated Vercel Sandbox microVM (CONDUCTOR_SANDBOX=local is dev-only).
 export function Sandbox() {
   const [cmd, setCmd] = useState('node --version')
   const [result, setResult] = useState<ToolResult | null>(null)
@@ -61,8 +62,8 @@ export function Sandbox() {
           </pre>
         )}
         <div className="sandbox-hint">
-          Tool execution behind the COO router · allowlisted commands ·{' '}
-          <code>CONDUCTOR_SANDBOX=local</code> to run for real
+          Tool execution behind the COO router · isolated microVM ·{' '}
+          <code>CONDUCTOR_SANDBOX=vercel</code> to run for real
         </div>
       </div>
     </div>

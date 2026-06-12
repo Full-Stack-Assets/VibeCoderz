@@ -10,12 +10,12 @@
  */
 
 import { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool } from './tools.js';
-import { getExecutor, SimulatedExecutor, LocalSandboxExecutor } from './executors.js';
+import { getExecutor, SimulatedExecutor, LocalSandboxExecutor, VercelSandboxExecutor } from './executors.js';
 import { runAgenticTurn, makeSimulatedPlanner } from './agent-loop.js';
 import { runPureTool, calculator, currentTime, analyzeData } from './pure-tools.js';
 import { runWebTool, webSearch, fetchUrl, webEnabled } from './web-tools.js';
 
-export { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor };
+export { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor, VercelSandboxExecutor };
 export { runAgenticTurn, makeSimulatedPlanner };
 export { runPureTool, calculator, currentTime, analyzeData };
 export { runWebTool, webSearch, fetchUrl, webEnabled };
@@ -61,5 +61,11 @@ export class ToolRegistry {
 
 /** Convenience: run a single tool with the env-selected executor. */
 export async function runTool(name, args, env = process.env) {
-  return new ToolRegistry({ executor: getExecutor(env) }).run(name, args);
+  const executor = getExecutor(env);
+  try {
+    return await new ToolRegistry({ executor }).run(name, args);
+  } finally {
+    // Tear down any per-call resource (e.g. a Vercel Sandbox microVM).
+    await executor.dispose?.();
+  }
 }
