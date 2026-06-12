@@ -31,6 +31,7 @@ const NO_KEYS = {
   OPENAI_API_KEY: undefined,
   XAI_API_KEY: undefined,
   AI_GATEWAY_API_KEY: undefined,
+  VERCEL_OIDC_TOKEN: undefined,
   OPENROUTER_API_KEY: undefined,
 };
 
@@ -55,6 +56,17 @@ test('a gateway key makes every model live — including Gemini', () => {
   });
   withEnv({ ...NO_KEYS, OPENROUTER_API_KEY: 'or-test' }, () => {
     assert.equal(canPlanLive('xai/grok-4.1-fast-reasoning'), true);
+  });
+});
+
+test("Vercel's auto-injected OIDC token alone makes every model live", () => {
+  // On a Vercel deployment VERCEL_OIDC_TOKEN is present without any explicit
+  // gateway key — live mode must activate with zero key management.
+  withEnv({ ...NO_KEYS, VERCEL_OIDC_TOKEN: 'oidc-test' }, () => {
+    assert.equal(canPlanLive('anthropic/claude-opus-4.8'), true);
+    assert.equal(canPlanLive('google/gemini-3.1-pro-preview'), true);
+    const planner = makeLiveToolPlanner({ modelId: 'anthropic/claude-opus-4.8', ...ARGS });
+    assert.equal(typeof planner, 'function');
   });
 });
 
