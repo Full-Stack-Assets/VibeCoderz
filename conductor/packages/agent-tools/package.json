@@ -7,5 +7,8 @@
   "exports": { ".": "./src/index.js" },
   "scripts": { "test": "node --test" },
   "license": "MIT",
-  "engines": { "node": ">=18.0.0" }
+  "engines": { "node": ">=18.0.0" },
+  "optionalDependencies": {
+    "@vercel/sandbox": "^2.2.0"
+  }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { PLANS, type PlanId } from '@/lib/auth'
+import { PLANS, TOPUP_PACKS, type PlanId } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { useAuth } from './AuthContext'
 
@@ -14,13 +14,26 @@ export function Pricing({
   onClose?: () => void
   onDone?: () => void
 }) {
-  const { user, billing, startCheckout, openPortal } = useAuth()
+  const { user, billing, startCheckout, openPortal, startTopup } = useAuth()
   const currentPlan: PlanId = user?.plan ?? 'free'
   const hasSubscription = !!user?.subscriptionStatus && user.subscriptionStatus !== 'canceled'
 
   const [selected, setSelected] = useState<PlanId>(currentPlan)
   const [busy, setBusy] = useState(false)
+  const [toppingUp, setToppingUp] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const buyTopup = async (packId: string) => {
+    if (toppingUp) return
+    setError(null)
+    setToppingUp(packId)
+    try {
+      window.location.href = await startTopup(packId)
+    } catch (e) {
+      setError((e as Error).message)
+      setToppingUp(null)
+    }
+  }
   const ref = useRef<HTMLDivElement>(null)
   useFocusTrap(ref, mode === 'manage', onClose)
 
@@ -131,6 +144,36 @@ export function Pricing({
             )
           })}
         </div>
+
+        {mode === 'manage' && billing.enabled && (
+          <div className="topup-section">
+            <div className="topup-section-head">
+              <span className="topup-section-title">Add routing credit</span>
+              <span className="topup-section-bal">
+                Balance: <strong>${(user?.topupUSD ?? 0).toFixed(2)}</strong>
+              </span>
+            </div>
+            <p className="topup-section-sub">
+              Pay-as-you-go credit for when you outpace your plan’s budget. It rolls over and never expires.
+            </p>
+            <div className="topup-section-packs">
+              {TOPUP_PACKS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="topup-buy"
+                  disabled={!!toppingUp}
+                  onClick={() => buyTopup(p.id)}
+                >
+                  <span className="topup-buy-price">${p.priceUSD}</span>
+                  <span className="topup-buy-credit">
+                    {toppingUp === p.id ? 'Redirecting…' : `$${p.creditUSD} credit`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <p className="auth-error">{error}</p>}
 

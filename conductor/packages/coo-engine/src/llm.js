@@ -72,19 +72,25 @@ function hasKey(provider) {
 
 /**
  * Resolve a single OpenAI-compatible GATEWAY that can reach EVERY catalog model
- * (Anthropic, OpenAI, xAI, Google/Gemini, …) with one key — the catalog ids are
- * already `provider/model`, exactly the slug format these gateways use.
- *   - Vercel AI Gateway  (AI_GATEWAY_API_KEY)
- *   - OpenRouter         (OPENROUTER_API_KEY)
- * Returns null when no gateway key is set (callers use per-provider native keys
- * or simulation). A gateway takes precedence over native provider keys.
+ * (Anthropic, OpenAI, xAI, Google/Gemini, …) with one credential — the catalog
+ * ids are already `provider/model`, exactly the slug format these gateways use.
+ *   - Vercel AI Gateway, API key   (AI_GATEWAY_API_KEY)
+ *   - Vercel AI Gateway, OIDC      (VERCEL_OIDC_TOKEN — injected automatically on
+ *     every Vercel deployment, so live mode needs ZERO key management in prod;
+ *     it just requires AI Gateway to be enabled/funded on the Vercel team)
+ *   - OpenRouter                   (OPENROUTER_API_KEY)
+ * Returns null when no gateway credential is present (callers use per-provider
+ * native keys or simulation). A gateway takes precedence over native keys.
  */
 export function gatewayConfig(env = process.env) {
-  if (env.AI_GATEWAY_API_KEY) {
+  // An explicit key wins; otherwise fall back to Vercel's auto-injected OIDC
+  // token so deployments go live without anyone setting a secret.
+  const vercelCred = env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN;
+  if (vercelCred) {
     return {
-      kind: 'vercel',
+      kind: env.AI_GATEWAY_API_KEY ? 'vercel' : 'vercel-oidc',
       baseURL: env.AI_GATEWAY_BASE_URL || 'https://ai-gateway.vercel.sh/v1',
-      apiKey: env.AI_GATEWAY_API_KEY,
+      apiKey: vercelCred,
       headers: {},
     };
   }
@@ -192,7 +198,12 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
       // Native providers want the bare model id; gateways want the full
       // `provider/model` catalog id. `modelName` overrides when given.
       model: modelName || wireModelId(model),
-      max_tokens: maxTokens,
+      // OpenAI's GPT-5 family (incl. gpt-5.3-codex) rejects `max_tokens` on Chat
+      // Completions with a 400 and requires `max_completion_tokens`. Other
+      // providers (xAI, Google via gateway) still take `max_tokens`.
+      ...(model.provider === 'openai'
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
@@ -243,41 +254,67 @@ export function simulate(model, { messages }) {
 export async function complete(modelId, opts = {}) {
   const model = getModel(modelId);
   if (!model) throw new Error(`unknown model ${modelId}`);
-  const { system, messages = [], maxTokens = 1024 } = opts;
+  const { system, messages = [], maxTokens = 4096 } = opts;
 
-  // Gateway path: one key reaches every model (incl. Gemini). Takes precedence.
   const gw = gatewayConfig();
-  if (gw) {
-    const result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
-      baseURL: gw.baseURL,
-      apiKey: gw.apiKey,
-      headers: gw.headers,
-      modelName: model.id, // gateways use the full provider/model slug
-    });
-    return { ...result, model: model.id, provider: `gateway:${gw.kind}`, costUSD: meter(model, result.usage), simulated: false };
+  const canGoLive = gw || hasKey(model.provider);
+
+  let liveError = null;
+  if (canGoLive) {
+    // A live attempt can still fail at the network/provider edge (gateway not
+    // funded, model temporarily unavailable, transient 5xx past retries). Rather
+    // than crash the turn, log it and fall back to a clearly-labelled
+    // simulation — the product stays usable and the cause is visible in logs.
+    try {
+      let result, provider;
+      if (gw) {
+        // Gateway path: one credential reaches every model (incl. Gemini).
+        result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
+          baseURL: gw.baseURL,
+          apiKey: gw.apiKey,
+          headers: gw.headers,
+          modelName: model.id, // gateways use the full provider/model slug
+        });
+        provider = `gateway:${gw.kind}`;
+      } else if (model.provider === 'anthropic') {
+        result = await callAnthropic(model, { system, messages, maxTokens });
+        provider = 'anthropic';
+      } else if (model.provider === 'openai') {
+        result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
+          baseURL: 'https://api.openai.com/v1',
+          apiKey: process.env.OPENAI_API_KEY,
+        });
+        provider = 'openai';
+      } else if (model.provider === 'xai') {
+        result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
+          baseURL: 'https://api.x.ai/v1',
+          apiKey: process.env.XAI_API_KEY,
+        });
+        provider = 'xai';
+      } else {
+        throw new Error(`no transport for provider ${model.provider}`);
+      }
+      return { ...result, model: model.id, provider, costUSD: meter(model, result.usage), simulated: false, simReason: null };
+    } catch (err) {
+      liveError = String(err?.message || err);
+      console.warn(
+        `[coo-engine] live completion failed for ${model.id} ` +
+          `(${liveError}); falling back to simulation.`
+      );
+    }
   }
 
-  if (!hasKey(model.provider)) {
-    const sim = simulate(model, { messages });
-    return { ...sim, model: model.id, provider: model.provider, costUSD: meter(model, sim.usage), simulated: true };
-  }
-
-  let result;
-  if (model.provider === 'anthropic') {
-    result = await callAnthropic(model, { system, messages, maxTokens });
-  } else if (model.provider === 'openai') {
-    result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
-      baseURL: 'https://api.openai.com/v1',
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  } else if (model.provider === 'xai') {
-    result = await callOpenAICompatible(model, { system, messages, maxTokens }, {
-      baseURL: 'https://api.x.ai/v1',
-      apiKey: process.env.XAI_API_KEY,
-    });
-  } else {
-    throw new Error(`no transport for provider ${model.provider}`);
-  }
-
-  return { ...result, model: model.id, provider: model.provider, costUSD: meter(model, result.usage), simulated: false };
+  const sim = simulate(model, { messages });
+  return {
+    ...sim,
+    model: model.id,
+    provider: gw ? `gateway:${gw.kind}` : model.provider,
+    costUSD: meter(model, sim.usage),
+    simulated: true,
+    // Why this turn simulated, so "key set but still simulating" is diagnosable:
+    // a swallowed live error (the usual cause) vs. no credential at all.
+    simReason: liveError
+      ? `live call failed: ${liveError}`
+      : 'no provider credential configured (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)',
+  };
 }

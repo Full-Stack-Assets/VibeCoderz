@@ -29,19 +29,19 @@ export const PLANS: Plan[] = [
     price: '$0',
     period: 'forever',
     tagline: 'Cost-optimized routing on a daily budget.',
-    features: ['Smart model routing', '$1.00 daily budget', 'Web & data tools', 'Image understanding'],
+    features: ['Smart model routing', 'Generous daily free usage', 'Web & data tools', 'Image understanding'],
   },
   {
     id: 'pro',
     name: 'Pro',
     price: '$20',
     period: '/month',
-    tagline: 'More budget and premium models when they earn it.',
+    tagline: 'More headroom and premium models when they earn it.',
     features: [
       'Everything in Free',
-      '$25 monthly budget',
-      'Premium models (Opus, GPT-5.5)',
-      'Priority routing',
+      'High monthly usage limit',
+      'Premium models (Opus, GPT-5.3)',
+      'Pin any model · priority routing',
       'Unlimited conversations',
     ],
     highlight: true,
@@ -51,8 +51,8 @@ export const PLANS: Plan[] = [
     name: 'Max',
     price: '$100',
     period: '/month',
-    tagline: 'Highest budget and quality floor for heavy use.',
-    features: ['Everything in Pro', '$150 monthly budget', 'Highest quality floor', 'Early access features'],
+    tagline: 'Highest usage limit and quality floor for heavy use.',
+    features: ['Everything in Pro', 'Highest usage limit', 'Highest quality floor', 'Early access features'],
   },
 ]
 
@@ -65,7 +65,47 @@ export interface User {
   plan: PlanId
   role: 'user' | 'admin'
   subscriptionStatus: string | null
+  /** Remaining pay-as-you-go top-up credit (USD). */
+  topupUSD: number
 }
+
+/**
+ * Client-safe mirror of the server's plan limits (lib/server/plans.ts) — used
+ * only to gate the UI. The server is always the source of truth; this just
+ * avoids showing controls a plan can't use.
+ */
+export interface PlanCaps {
+  allowPreferModel: boolean
+  maxQualityFloor: number
+  budgetLabel: string
+}
+export const PLAN_CAPS: Record<PlanId, PlanCaps> = {
+  free: { allowPreferModel: false, maxQualityFloor: 0.85, budgetLabel: '$0.20 / day' },
+  pro: { allowPreferModel: true, maxQualityFloor: 0.95, budgetLabel: '$10 / month' },
+  max: { allowPreferModel: true, maxQualityFloor: 1, budgetLabel: '$50 / month' },
+}
+export const planCaps = (plan: PlanId | undefined): PlanCaps => PLAN_CAPS[plan ?? 'free'] ?? PLAN_CAPS.free
+
+/**
+ * Pay-as-you-go top-up ladder. When a user exhausts their plan budget, they can
+ * buy more routing credit instead of waiting for the period to reset. `priceUSD`
+ * is what they pay; `creditUSD` is the routing budget it grants (a 20% margin —
+ * tune the ratio here, in one place). Credit rolls over and never expires. This
+ * is client-safe metadata; the server (lib/server/stripe.ts) is authoritative on
+ * price → credit so the amount can't be tampered with from the browser.
+ */
+export interface TopupPack {
+  id: string
+  priceUSD: number
+  creditUSD: number
+}
+export const TOPUP_PACKS: TopupPack[] = [
+  { id: 'topup_10', priceUSD: 10, creditUSD: 8 },
+  { id: 'topup_25', priceUSD: 25, creditUSD: 20 },
+  { id: 'topup_50', priceUSD: 50, creditUSD: 40 },
+]
+export const topupPack = (id: string | undefined): TopupPack | undefined =>
+  TOPUP_PACKS.find((p) => p.id === id)
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isValidEmail = (e: string) => EMAIL_RE.test(e.trim())

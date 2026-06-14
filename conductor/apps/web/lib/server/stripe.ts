@@ -70,6 +70,42 @@ export async function createCheckoutSession(opts: {
   return { url: session.url }
 }
 
+/**
+ * One-time payment Checkout for a top-up pack. Uses inline price_data so no
+ * pre-created Stripe price is needed. The granted credit is stamped into the
+ * session metadata (server-controlled) and read back by the webhook — the
+ * browser only ever names a pack id, never the credit amount.
+ */
+export async function createTopupCheckoutSession(opts: {
+  userId: string
+  packId: string
+  priceUSD: number
+  creditUSD: number
+  customerId?: string | null
+  email?: string
+  successUrl: string
+  cancelUrl: string
+}): Promise<{ url: string }> {
+  const session = (await stripePost('/checkout/sessions', {
+    mode: 'payment',
+    'line_items[0][price_data][currency]': 'usd',
+    'line_items[0][price_data][product_data][name]': `VibeCoderz routing credit ($${opts.creditUSD})`,
+    'line_items[0][price_data][unit_amount]': String(Math.round(opts.priceUSD * 100)),
+    'line_items[0][quantity]': '1',
+    success_url: opts.successUrl,
+    cancel_url: opts.cancelUrl,
+    client_reference_id: opts.userId,
+    customer: opts.customerId || undefined,
+    customer_email: opts.customerId ? undefined : opts.email,
+    'metadata[kind]': 'topup',
+    'metadata[userId]': opts.userId,
+    'metadata[packId]': opts.packId,
+    'metadata[creditUSD]': String(opts.creditUSD),
+  })) as { url?: string }
+  if (!session.url) throw new Error('Stripe did not return a checkout URL.')
+  return { url: session.url }
+}
+
 export async function createPortalSession(opts: { customerId: string; returnUrl: string }): Promise<{ url: string }> {
   const session = (await stripePost('/billing_portal/sessions', {
     customer: opts.customerId,

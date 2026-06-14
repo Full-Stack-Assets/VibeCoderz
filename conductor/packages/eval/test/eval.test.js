@@ -30,7 +30,7 @@ test('dataset is well-formed and covers every domain', () => {
 
 test('synthetic oracle: capability dominates and stays in [0,1]', () => {
   const opus = getModel('anthropic/claude-opus-4.8');
-  const grok = getModel('xai/grok-4.3-fast-reasoning');
+  const grok = getModel('xai/grok-4.1-fast-reasoning');
   const hard = { idealType: 'reasoning', difficulty: 0.95 };
   const qo = syntheticQuality(opus, hard);
   const qg = syntheticQuality(grok, hard);
@@ -39,8 +39,8 @@ test('synthetic oracle: capability dominates and stays in [0,1]', () => {
 });
 
 test('synthetic oracle: a text-only model is near-zero on a vision task', () => {
-  const grok = getModel('xai/grok-4.3-fast-reasoning'); // multimodal: false
-  const gemini = getModel('google/gemini-3-pro'); // multimodal: true
+  const grok = getModel('xai/grok-4.1-fast-reasoning'); // multimodal: false
+  const gemini = getModel('google/gemini-3.1-pro-preview'); // multimodal: true
   const visionTask = { idealType: 'reasoning', difficulty: 0.6, requiresVision: true };
   assert.ok(syntheticQuality(grok, visionTask) <= 0.25);
   assert.ok(syntheticQuality(gemini, visionTask) > 0.8);
@@ -103,11 +103,11 @@ test('qualityOracleStrategy resolves correctly with an async (live) oracle', asy
   const asyncOracle = {
     name: 'mock-live',
     live: true,
-    quality: async (model) => (model.id === 'google/gemini-3-pro' ? 0.99 : 0.5),
+    quality: async (model) => (model.id === 'google/gemini-3.1-pro-preview' ? 0.99 : 0.5),
   };
   const pick = qualityOracleStrategy(asyncOracle);
   const id = await pick({ idealType: 'reasoning', difficulty: 0.5 });
-  assert.equal(id, 'google/gemini-3-pro');
+  assert.equal(id, 'google/gemini-3.1-pro-preview');
 })
 
 test('report renders a Markdown table with the headline', async () => {

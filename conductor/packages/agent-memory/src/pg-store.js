@@ -5,20 +5,36 @@
  * terminal), this store runs `CREATE TABLE IF NOT EXISTS` on first use, so the
  * only operator step is setting DATABASE_URL — no CLI, no migration files. It
  * implements the same interface as InMemoryStore, so the factory swaps it in
- * transparently. The `pg` driver is lazy-imported (non-literal specifier) so the
- * package still builds and unit-tests with no `pg` dependency or database.
+ * transparently. The `pg` driver is imported lazily (only when DATABASE_URL is
+ * set) so unit tests run without a database; the specifier stays literal so
+ * bundlers and Vercel's file tracing include the driver in server bundles.
  */
 
 import { randomUUID } from 'node:crypto';
 
 const id = (p) => `${p}_${randomUUID()}`;
 
-function sslConfig() {
-  const url = process.env.DATABASE_URL || '';
-  // Local databases usually don't use TLS; managed providers (Neon/Supabase/
-  // Vercel) require it. Default to permissive TLS off-localhost.
-  if (/@(localhost|127\.0\.0\.1)/.test(url) && !/sslmode=require/.test(url)) return false;
-  return { rejectUnauthorized: false };
+/**
+ * Connection config with sane, quiet TLS:
+ * - `sslmode=prefer|require|verify-ca` in the URL are normalized to
+ *   `verify-full` — that's what pg treats them as today anyway, and naming it
+ *   explicitly pins the stronger semantics AND silences pg's per-connection
+ *   "SECURITY WARNING" deprecation notice about the aliases.
+ * - No sslmode + localhost → plain TCP; no sslmode + remote → verified TLS.
+ * - Self-signed providers can opt out explicitly with PG_SSL_INSECURE=1.
+ */
+function connectionConfig() {
+  let connectionString = process.env.DATABASE_URL || '';
+  if (process.env.PG_SSL_INSECURE === '1') {
+    return { connectionString, ssl: { rejectUnauthorized: false } };
+  }
+  connectionString = connectionString.replace(
+    /([?&])sslmode=(prefer|require|verify-ca)(?=&|$)/,
+    '$1sslmode=verify-full'
+  );
+  if (/[?&]sslmode=/.test(connectionString)) return { connectionString };
+  if (/@(localhost|127\.0\.0\.1)/.test(connectionString)) return { connectionString, ssl: false };
+  return { connectionString, ssl: true };
 }
 
 const SCHEMA = `
@@ -31,8 +47,15 @@ CREATE TABLE IF NOT EXISTS users (
   role text NOT NULL DEFAULT 'user',
   stripe_customer_id text,
   subscription_status text,
+  spent_usd double precision NOT NULL DEFAULT 0,
+  spend_period_start bigint NOT NULL DEFAULT 0,
+  topup_credit_usd double precision NOT NULL DEFAULT 0,
   created_at bigint NOT NULL
 );
+-- Backfill columns on databases created before usage metering existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -78,6 +101,7 @@ const mapUser = (r) =>
     role: r.role,
     stripeCustomerId: r.stripe_customer_id,
     subscriptionStatus: r.subscription_status,
+    topupUSD: Number(r.topup_credit_usd) || 0,
     createdAt: Number(r.created_at),
   };
 
@@ -99,10 +123,14 @@ export class PgStore {
 
   /** Connect, ensure the schema exists, and return a ready store. */
   static async create() {
-    const spec = ['p', 'g'].join(''); // defeat bundler static analysis
-    const pg = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ spec);
+    // Literal specifier on purpose: `pg` is a declared dependency, and the
+    // import must stay statically analyzable so Vercel's file tracing bundles
+    // the driver into each serverless function. (An obfuscated specifier made
+    // tracing miss it → import failed at runtime → silent in-memory fallback →
+    // sessions/users differed per lambda instance.)
+    const pg = await import('pg');
     const { Pool } = pg.default ?? pg;
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig() });
+    const pool = new Pool(connectionConfig());
     await pool.query(SCHEMA);
     return new PgStore(pool);
   }
@@ -281,5 +309,45 @@ export class PgStore {
   async deleteSession(token) {
     await this.q(`DELETE FROM sessions WHERE token = $1`, [token]);
     return true;
+  }
+
+  // --- Per-account usage metering -----------------------------------------
+
+  async getUserUsage(userId, periodMs) {
+    const { rows } = await this.q(
+      `SELECT spent_usd, spend_period_start FROM users WHERE id = $1`,
+      [userId]
+    );
+    const r = rows[0];
+    if (!r) return 0;
+    const now = Date.now();
+    if (!Number(r.spend_period_start) || now - Number(r.spend_period_start) >= periodMs) {
+      await this.q(`UPDATE users SET spent_usd = 0, spend_period_start = $2 WHERE id = $1`, [userId, now]);
+      return 0;
+    }
+    return Number(r.spent_usd) || 0;
+  }
+
+  async addUserUsage(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET spent_usd = spent_usd + $2 WHERE id = $1 RETURNING spent_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].spent_usd) : 0;
+  }
+
+  // --- Top-up credit (purchased, rolls over across periods) ---------------
+
+  async getUserCredit(userId) {
+    const { rows } = await this.q(`SELECT topup_credit_usd FROM users WHERE id = $1`, [userId]);
+    return rows[0] ? Number(rows[0].topup_credit_usd) || 0 : 0;
+  }
+
+  async addUserCredit(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET topup_credit_usd = GREATEST(0, topup_credit_usd + $2) WHERE id = $1 RETURNING topup_credit_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].topup_credit_usd) : 0;
   }
 }

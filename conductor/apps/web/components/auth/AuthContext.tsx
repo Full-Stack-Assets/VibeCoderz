@@ -20,6 +20,8 @@ interface AuthValue {
   startCheckout: (plan: PlanId) => Promise<string>
   /** Open the Stripe billing portal; resolves to a redirect URL. */
   openPortal: () => Promise<string>
+  /** Buy a top-up credit pack; resolves to a Stripe Checkout redirect URL. */
+  startTopup: (pack: string) => Promise<string>
 }
 
 const Ctx = createContext<AuthValue | null>(null)
@@ -107,9 +109,15 @@ export function AuthProviderComponent({ children }: { children: ReactNode }) {
     return ((await res.json()) as { url: string }).url
   }, [])
 
+  const startTopup = useCallback(async (pack: string) => {
+    const res = await postJSON('/api/billing/topup', { pack })
+    if (!res.ok) throw new Error(await readError(res, 'Could not start the top-up.'))
+    return ((await res.json()) as { url: string }).url
+  }, [])
+
   const value = useMemo<AuthValue>(
-    () => ({ loading, user, billing, register, login, logout, refresh, startCheckout, openPortal }),
-    [loading, user, billing, register, login, logout, refresh, startCheckout, openPortal]
+    () => ({ loading, user, billing, register, login, logout, refresh, startCheckout, openPortal, startTopup }),
+    [loading, user, billing, register, login, logout, refresh, startCheckout, openPortal, startTopup]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

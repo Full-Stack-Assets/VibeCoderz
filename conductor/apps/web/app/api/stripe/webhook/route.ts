@@ -29,7 +29,15 @@ export async function POST(req: Request) {
   const meta = (obj.metadata as Record<string, string> | undefined) ?? {}
 
   try {
-    if (event.type === 'checkout.session.completed') {
+    if (event.type === 'checkout.session.completed' && meta.kind === 'topup') {
+      // One-time credit purchase — grant the server-stamped credit amount.
+      const userId = (obj.client_reference_id as string) || meta.userId
+      const creditUSD = Number(meta.creditUSD)
+      if (userId && creditUSD > 0) {
+        await store.addUserCredit(userId, creditUSD)
+        if (obj.customer) await store.updateUser(userId, { stripeCustomerId: obj.customer as string })
+      }
+    } else if (event.type === 'checkout.session.completed') {
       const userId = (obj.client_reference_id as string) || meta.userId
       const patch: Partial<DBUser> = { subscriptionStatus: 'active' }
       if (obj.customer) patch.stripeCustomerId = obj.customer as string

@@ -1,0 +1,71 @@
+name: CI
+
+# Quality gate for the Vibe Coding Platform. Runs on every PR and on pushes to
+# main so a broken type-check, lint, or build never reaches a deploy. Vercel's
+# Git integration owns the actual deployment; this workflow is the pre-merge
+# checkpoint in front of it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform:
+    name: Platform (type-check · build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      # Note: `pnpm lint` is intentionally omitted — `next lint` was removed in
+      # Next 16 and the ESLint toolchain isn't wired up. Re-add a lint step once
+      # ESLint is installed and the script is migrated to the ESLint CLI.
+
+      - name: Build
+        run: pnpm build
+        env:
+          # The build must succeed with no real credentials — every external
+          # dependency (DB, gateway, Stripe, sandbox) is optional at build time
+          # and only required at runtime. A local SQLite file stands in for the
+          # database so the migrator has somewhere to point.
+          DATABASE_URL: file:./vibe.db
+
+  conductor:
+    name: Conductor (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: conductor
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: conductor/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test (orchestration · memory · tools · eval)
+        run: pnpm test

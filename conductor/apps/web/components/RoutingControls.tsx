@@ -29,6 +29,8 @@ export function RoutingControls({
   preferModel,
   qualityFloor,
   routedLabel,
+  canPin = true,
+  maxQualityFloor = 1,
   onChange,
   onClose,
 }: {
@@ -36,6 +38,10 @@ export function RoutingControls({
   preferModel: string | null
   qualityFloor: number
   routedLabel?: string
+  /** Whether the plan may pin a specific model (server-enforced too). */
+  canPin?: boolean
+  /** Plan cap on the quality floor a user can demand. */
+  maxQualityFloor?: number
   onChange: (next: { preferModel: string | null; qualityFloor: number }) => void
   onClose: () => void
 }) {
@@ -73,11 +79,15 @@ export function RoutingControls({
           </span>
         </button>
 
+        {!canPin && (
+          <p className="rc-upsell">🔒 Pinning a specific model is a Pro feature — Free stays on cost-optimized Auto.</p>
+        )}
         {models.map((m) => (
           <button
             key={m.id}
-            className={`rc-model ${preferModel === m.id ? 'active' : ''}`}
-            onClick={() => onChange({ preferModel: m.id, qualityFloor })}
+            className={`rc-model ${preferModel === m.id ? 'active' : ''} ${canPin ? '' : 'locked'}`}
+            disabled={!canPin}
+            onClick={() => canPin && onChange({ preferModel: m.id, qualityFloor })}
           >
             <div className="rc-model-main">
               <span className="rc-model-name">{m.label}</span>
@@ -93,17 +103,22 @@ export function RoutingControls({
 
         <div className="rc-section-label">Minimum quality floor</div>
         <div className="rc-floors" role="group" aria-label="Minimum quality floor">
-          {FLOORS.map((f) => (
-            <button
-              key={f.value}
-              className={`rc-floor ${qualityFloor === f.value ? 'active' : ''}`}
-              onClick={() => onChange({ preferModel, qualityFloor: f.value })}
-              title={f.hint}
-              aria-pressed={qualityFloor === f.value}
-            >
-              {f.label}
-            </button>
-          ))}
+          {FLOORS.map((f) => {
+            const locked = f.value > maxQualityFloor
+            return (
+              <button
+                key={f.value}
+                className={`rc-floor ${qualityFloor === f.value ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                disabled={locked}
+                onClick={() => !locked && onChange({ preferModel, qualityFloor: f.value })}
+                title={locked ? 'Upgrade your plan to raise the quality floor' : f.hint}
+                aria-pressed={qualityFloor === f.value}
+              >
+                {f.label}
+                {locked ? ' 🔒' : ''}
+              </button>
+            )
+          })}
         </div>
         <p className="rc-note">
           A floor excludes models below the bar before cost optimization — the engine still picks

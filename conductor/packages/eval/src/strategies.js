@@ -53,7 +53,7 @@ export function qualityOracleStrategy(oracle) {
 
 // Conventional baseline picks from the catalog.
 export const PREMIUM_MODEL = 'anthropic/claude-opus-4.8';
-export const CHEAPEST_MODEL = 'xai/grok-4.3-fast-reasoning';
+export const CHEAPEST_MODEL = 'xai/grok-4.1-fast-reasoning';
 export const BALANCED_MODEL = 'anthropic/claude-sonnet-4.6';
 
 /** Build the default strategy set, given an oracle for the quality upper bound. */

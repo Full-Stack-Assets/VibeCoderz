@@ -47,14 +47,14 @@ test('image + analysis turn avoids the text-only analysis specialist (Grok)', ()
     hasImages: true,
   });
   assert.equal(r.ok, true);
-  assert.notEqual(r.model.id, 'xai/grok-4.3-fast-reasoning');
+  assert.notEqual(r.model.id, 'xai/grok-4.1-fast-reasoning');
   assert.equal(r.model.multimodal, true);
 });
 
 test('visionModels excludes the text-only model', () => {
   const ids = visionModels().map((m) => m.id);
-  assert.ok(ids.includes('google/gemini-3-pro'));
-  assert.ok(!ids.includes('xai/grok-4.3-fast-reasoning'));
+  assert.ok(ids.includes('google/gemini-3.1-pro-preview'));
+  assert.ok(!ids.includes('xai/grok-4.1-fast-reasoning'));
 });
 
 test('content helpers convert multimodal blocks per provider', () => {

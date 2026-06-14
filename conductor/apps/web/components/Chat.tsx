@@ -28,15 +28,9 @@ import { useAuth } from './auth/AuthContext'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { ShortcutsHelp } from './ShortcutsHelp'
-import { planById } from '@/lib/auth'
+import { planById, planCaps, TOPUP_PACKS } from '@/lib/auth'
+import { rotatingSuggestions, rotationWindow } from '@/lib/suggestions'
 import { useFocusTrap } from '@/lib/useFocusTrap'
-
-const SUGGESTIONS = [
-  'Search the web for the latest on the EU AI Act and cite sources',
-  'Analyze this CSV and find the outliers',
-  'What’s in this screenshot? (attach an image)',
-  'Design a fault-tolerant job queue, then draft the README',
-]
 
 const TEXT_EXT = /\.(csv|tsv|txt|md|json|log|ya?ml)$/i
 const MAX_ATTACH_BYTES = 5 * 1024 * 1024 // 5 MB per file
@@ -67,7 +61,7 @@ interface AuditItem {
 }
 
 export function Chat() {
-  const { user, logout } = useAuth()
+  const { user, logout, startTopup, billing } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
   // Stable handle to the current account id for fire-and-forget cloud sync.
@@ -87,6 +81,7 @@ export function Chat() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
+  const [credit, setCredit] = useState(0)
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
@@ -95,6 +90,9 @@ export function Chat() {
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [atBottom, setAtBottom] = useState(true)
+  const [capReached, setCapReached] = useState(false)
+  const [toppingUp, setToppingUp] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<string[]>(() => rotatingSuggestions())
 
   const convRef = useRef<HTMLDivElement>(null)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -111,6 +109,23 @@ export function Chat() {
   const mounted = useRef(false)
 
   useEffect(() => setConversations(listConversations()), [])
+  // Keep the live credit balance in sync with the account (updated again after
+  // each turn via the stream's `done` event, and after returning from Stripe).
+  useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
+  // Re-deal the starter prompts when the rotation window rolls over, so even a
+  // tab left open gets fresh suggestions (a minutely index check, no re-render
+  // unless the window actually changed).
+  useEffect(() => {
+    let win = rotationWindow()
+    const id = setInterval(() => {
+      const next = rotationWindow()
+      if (next !== win) {
+        win = next
+        setSuggestions(rotatingSuggestions())
+      }
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [])
   useEffect(() => {
     let alive = true
     fetch('/api/models')
@@ -238,6 +253,7 @@ export function Chat() {
       const last = history[history.length - 1]
       if (!last || last.role !== 'user') return
       setSending(true)
+      setCapReached(false)
 
       const cid = currentId ?? convId()
       if (!currentId) setCurrentId(cid)
@@ -300,6 +316,8 @@ export function Chat() {
               costUSD: data.costUSD as number,
             }))
             setSpent(data.spentUSD as number)
+            if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
+            if (data.capReached) setCapReached(true)
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
           }
@@ -357,6 +375,21 @@ export function Chat() {
       await runTurn(history)
     },
     [attachments, sending, runTurn]
+  )
+
+  // Buy a top-up credit pack — redirect to Stripe Checkout.
+  const buyTopup = useCallback(
+    async (packId: string) => {
+      if (toppingUp) return
+      setToppingUp(packId)
+      try {
+        window.location.href = await startTopup(packId)
+      } catch (e) {
+        setToppingUp(null)
+        alert((e as Error).message)
+      }
+    },
+    [toppingUp, startTopup]
   )
 
   // Re-run the most recent user turn, replacing the assistant reply.
@@ -530,6 +563,8 @@ export function Chat() {
                 preferModel={preferModel}
                 qualityFloor={qualityFloor}
                 routedLabel={routedLabel}
+                canPin={planCaps(user?.plan).allowPreferModel}
+                maxQualityFloor={planCaps(user?.plan).maxQualityFloor}
                 onChange={({ preferModel: pm, qualityFloor: qf }) => {
                   setPreferModel(pm)
                   setQualityFloor(qf)
@@ -624,7 +659,7 @@ export function Chat() {
                   and you can see exactly why.
                 </p>
                 <div className="suggestions">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button key={s} className="chip" onClick={() => send(s)}>
                       {s}
                     </button>
@@ -720,6 +755,26 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              {capReached && billing.enabled && (
+                <div className="topup-bar" role="region" aria-label="Add routing credit">
+                  <span className="topup-label">Out of budget — add credit to keep going:</span>
+                  <div className="topup-packs">
+                    {TOPUP_PACKS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="topup-pack"
+                        disabled={!!toppingUp}
+                        onClick={() => buyTopup(p.id)}
+                        title={`Pay $${p.priceUSD} for $${p.creditUSD} of routing credit (rolls over)`}
+                      >
+                        {toppingUp === p.id ? '…' : `$${p.priceUSD}`}
+                        <span className="topup-credit">+${p.creditUSD}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {budgetCap && (
                 <div className="composer-budget" title="Session budget — turns throttle near the cap">
                   <div className="cb-bar">
@@ -732,6 +787,11 @@ export function Chat() {
                     ${spent.toFixed(4)} / ${budgetCap.toFixed(2)}
                     {budgetUtil >= 0.85 ? ' · near cap' : ''}
                   </span>
+                  {credit > 0 && (
+                    <span className="cb-credit" title="Pay-as-you-go top-up credit (rolls over)">
+                      +${credit.toFixed(2)} credit
+                    </span>
+                  )}
                 </div>
               )}
             </div>

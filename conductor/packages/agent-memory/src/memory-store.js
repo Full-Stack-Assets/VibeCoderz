@@ -35,6 +35,7 @@ export class InMemoryStore {
       role,
       stripeCustomerId: null,
       subscriptionStatus: null,
+      topupUSD: 0,
       createdAt: Date.now(),
     };
     this.users.set(user.id, user);
@@ -78,6 +79,40 @@ export class InMemoryStore {
 
   async deleteSession(token) {
     return this.sessions.delete(token);
+  }
+
+  // --- Per-account usage metering (server-authoritative budgets) ----------
+
+  async getUserUsage(userId, periodMs) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    const now = Date.now();
+    if (!u.spendPeriodStart || now - u.spendPeriodStart >= periodMs) {
+      u.spendPeriodStart = now;
+      u.spentUSD = 0;
+    }
+    return u.spentUSD || 0;
+  }
+
+  async addUserUsage(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.spentUSD = (u.spentUSD || 0) + (deltaUSD || 0);
+    return u.spentUSD;
+  }
+
+  // --- Top-up credit (purchased, rolls over across periods) ---------------
+
+  async getUserCredit(userId) {
+    const u = this.users.get(userId);
+    return u ? u.topupUSD || 0 : 0;
+  }
+
+  async addUserCredit(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.topupUSD = Math.max(0, (u.topupUSD || 0) + (deltaUSD || 0));
+    return u.topupUSD;
   }
 
   // --- Per-account conversation snapshots ---------------------------------

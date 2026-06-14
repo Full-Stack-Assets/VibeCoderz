@@ -1,9 +1,10 @@
 /**
  * WEB TOOLS — `web_search` and `fetch_url`, gated by `CONDUCTOR_WEB=live`.
  *
- * Mirrors Conductor's honest-simulation ethos: with no opt-in, both return
+ * Mirrors Conductor's honest-simulation ethos: locally both return
  * clearly-labelled simulated results (zero network, deterministic, demo-safe).
- * Set `CONDUCTOR_WEB=live` to go real:
+ * On a Vercel deployment they default to LIVE; set `CONDUCTOR_WEB=off` to force
+ * simulation, or `CONDUCTOR_WEB=live` to opt in anywhere. When live:
  *   - web_search uses Tavily when `TAVILY_API_KEY` is set, else a keyless
  *     DuckDuckGo Instant-Answer fallback.
  *   - fetch_url GETs the page and strips HTML to text (with a basic SSRF guard
@@ -20,7 +21,15 @@ const FETCH_TIMEOUT_MS = 10_000;
 const MAX_TEXT = 8000;
 
 export function webEnabled(env = process.env) {
-  return String(env.CONDUCTOR_WEB || '').toLowerCase() === 'live';
+  const flag = String(env.CONDUCTOR_WEB || '').toLowerCase()
+  if (flag === 'live' || flag === 'on' || flag === '1' || flag === 'true') return true
+  if (flag === 'off' || flag === '0' || flag === 'false') return false
+  // Default: auto-enable real web research on a Vercel deployment ONLY when a
+  // reliable search backend (Tavily) is configured. The keyless DuckDuckGo
+  // fallback is heavily rate-limited (returns 403s), so without a key we keep
+  // simulating — with a hint to set TAVILY_API_KEY — instead of erroring every
+  // turn. Force the keyless path anywhere with CONDUCTOR_WEB=live.
+  return !!((env.VERCEL || env.VERCEL_ENV) && env.TAVILY_API_KEY)
 }
 
 function withTimeout(ms) {
@@ -106,7 +115,7 @@ function simulatedSearch(query, max) {
   const rows = Array.from({ length: Math.min(max, 3) }, (_, i) => ({
     title: `[simulated] Result ${i + 1} for "${query}"`,
     url: `https://example.com/${encodeURIComponent(query)}/${i + 1}`,
-    snippet: 'Set CONDUCTOR_WEB=live (and optionally TAVILY_API_KEY) to return real web results.',
+    snippet: 'Simulated locally. Real web is on by default in production; set TAVILY_API_KEY for higher-quality results (or CONDUCTOR_WEB=live to go live anywhere).',
   }));
   return formatResults(query, rows);
 }
