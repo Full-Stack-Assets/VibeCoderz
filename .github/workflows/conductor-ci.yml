@@ -24,6 +24,10 @@ jobs:
         working-directory: conductor
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job only reads code and runs tests — it never pushes — so don't
+          # leave the checkout token persisted in .git/config in the workspace.
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
