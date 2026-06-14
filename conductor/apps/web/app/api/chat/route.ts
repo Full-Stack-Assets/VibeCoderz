@@ -80,6 +80,12 @@ const MAX_TEXT_ATTACH = 20_000
 // Override with CONDUCTOR_MAX_STEPS; cost is still metered per step.
 const MAX_AGENTIC_STEPS = Math.max(1, Number(process.env.CONDUCTOR_MAX_STEPS) || 12)
 
+// Max output tokens per model call. The library default of 1024 truncates real
+// answers (and large tool-call args) mid-output. Override with
+// CONDUCTOR_MAX_TOKENS. This is a ceiling, not a target — cost scales with the
+// tokens actually produced, so raising it only prevents truncation.
+const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS) || 4096)
+
 // Build engine messages: fold text-file attachments into the text, and attach
 // images as image blocks so vision-capable models receive them.
 function buildEngineMessages(messages: InMessage[]): EngineMessage[] {
@@ -137,13 +143,14 @@ async function persist(
 async function runAgentic(
   modelId: string,
   messages: EngineMessage[],
-  onStep: (step: ToolStep) => void
+  onStep: (step: ToolStep) => void,
+  maxTokens: number
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
   let simReason: string | null = null
   try {
-    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
+    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS, maxTokens })
     if (livePlanner) {
       try {
         const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
@@ -243,14 +250,14 @@ export async function POST(req: Request) {
         let simReason: string | null = null
 
         if (body.agentic) {
-          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }))
+          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }), MAX_OUTPUT_TOKENS)
           fullText = out.text
           steps = out.steps
           simulated = out.simulated
           simReason = out.simReason
           costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
         } else {
-          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: 1024 })) as {
+          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS })) as {
             text: string
             costUSD: number
             simulated: boolean

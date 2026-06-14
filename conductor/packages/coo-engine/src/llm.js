@@ -254,7 +254,7 @@ export function simulate(model, { messages }) {
 export async function complete(modelId, opts = {}) {
   const model = getModel(modelId);
   if (!model) throw new Error(`unknown model ${modelId}`);
-  const { system, messages = [], maxTokens = 1024 } = opts;
+  const { system, messages = [], maxTokens = 4096 } = opts;
 
   const gw = gatewayConfig();
   const canGoLive = gw || hasKey(model.provider);

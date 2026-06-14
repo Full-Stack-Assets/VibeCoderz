@@ -237,9 +237,19 @@ export class VercelSandboxExecutor {
   }
 }
 
-/** Select an executor from the environment. Default: simulated (zero-config). */
+/**
+ * Select an executor from the environment.
+ *
+ * On a Vercel deployment we default to the REAL Vercel Sandbox: the `@vercel/
+ * sandbox` dep is bundled and auth is automatic via OIDC, so agent tool calls
+ * actually run instead of returning simulated stubs (mirrors the web tools'
+ * auto-live-in-production behavior). Off-platform stays simulated for zero-config
+ * local dev. Override explicitly anywhere with CONDUCTOR_SANDBOX=vercel|local|
+ * simulated.
+ */
 export function getExecutor(env = process.env) {
-  const mode = (env.CONDUCTOR_SANDBOX || 'simulated').toLowerCase();
+  const onVercel = !!(env.VERCEL || env.VERCEL_ENV);
+  const mode = (env.CONDUCTOR_SANDBOX || (onVercel ? 'vercel' : 'simulated')).toLowerCase();
   if (mode === 'vercel') return new VercelSandboxExecutor();
   if (mode === 'local') return new LocalSandboxExecutor();
   return new SimulatedExecutor();
