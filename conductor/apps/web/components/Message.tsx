@@ -236,6 +236,22 @@ export function Message({
             )}
             <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
             <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
+            {msg.escalation?.escalated && (
+              <span
+                className="tag routed"
+                title={`The first model scored ${Math.round((msg.escalation.firstScore ?? 0) * 100)}/100 — below the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} quality bar — so the turn was escalated to a stronger model.`}
+              >
+                ↑ {msg.escalation.firstLabel ?? 'cheap'} → {msg.escalation.finalLabel ?? 'premium'}
+              </span>
+            )}
+            {msg.escalation && msg.escalation.evaluated && !msg.escalation.escalated && (
+              <span
+                className="tag"
+                title={`Quality-checked: the routed model scored ${Math.round((msg.escalation.score ?? 0) * 100)}/100, at or above the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} bar — no escalation needed.`}
+              >
+                ✓ quality-checked
+              </span>
+            )}
             {msg.simulated && <span className="tag sim">simulated</span>}
             {msg.decision.fallback && <span className="tag">fallback</span>}
             {msg.decision.overridden && <span className="tag">override</span>}

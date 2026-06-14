@@ -111,7 +111,7 @@ export async function completeWithEscalation(modelId, opts = {}, cfg = {}) {
     return {
       ...first,
       costUSD: Number(firstCost.toFixed(6)),
-      escalation: { evaluated: true, escalated: false, firstModel: modelId, score },
+      escalation: { evaluated: true, escalated: false, firstModel: modelId, score, qualityBar },
     };
   }
 
@@ -120,7 +120,7 @@ export async function completeWithEscalation(modelId, opts = {}, cfg = {}) {
     return {
       ...first,
       costUSD: Number(firstCost.toFixed(6)),
-      escalation: { evaluated: true, escalated: false, firstModel: modelId, score, reason: 'no higher model' },
+      escalation: { evaluated: true, escalated: false, firstModel: modelId, score, qualityBar, reason: 'no higher model' },
     };
   }
 
