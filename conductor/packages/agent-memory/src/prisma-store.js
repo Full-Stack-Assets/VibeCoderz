@@ -55,6 +55,18 @@ export class PrismaStore {
     });
   }
 
+  // Merge a quality-feedback signal into a message's meta (read-merge-write,
+  // since Prisma has no deep-merge for a Json column).
+  async recordFeedback(conversationId, messageId, signal) {
+    const m = await this.db.message.findFirst({ where: { id: messageId, conversationId } });
+    if (!m) return false;
+    await this.db.message.update({
+      where: { id: messageId },
+      data: { meta: { ...(m.meta || {}), feedback: { signal, at: Date.now() } } },
+    });
+    return true;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
 
   async upsertConversation({ id, ownerId, title, updatedAt, snapshot }) {

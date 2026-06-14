@@ -215,6 +215,18 @@ export function Chat() {
   const patch = (id: string, fn: (m: Msg) => Msg) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)))
 
+  // Record a per-turn quality label. Optimistic; best-effort POST to the server,
+  // which merges it into the stored message's meta (the feedback flywheel input).
+  const sendFeedback = (msg: Msg, signal: 'up' | 'down') => {
+    if (!msg.storeId || !currentId) return
+    patch(msg.id, (m) => ({ ...m, feedback: signal }))
+    void fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conversationId: currentId, messageId: msg.storeId, signal }),
+    }).catch(() => {})
+  }
+
   // Read selected files into attachments: images → data URL, text/data → text.
   const onFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return
@@ -316,6 +328,7 @@ export function Chat() {
               pending: false,
               simulated: data.simulated as boolean,
               costUSD: data.costUSD as number,
+              storeId: (data.messageId as string) || m.storeId,
             }))
             setSpent(data.spentUSD as number)
             if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
@@ -679,6 +692,11 @@ export function Chat() {
                     onRegenerate={
                       m.role === 'assistant' && i === messages.length - 1 && !sending && !m.pending
                         ? regenerate
+                        : undefined
+                    }
+                    onFeedback={
+                      m.role === 'assistant' && m.storeId && !m.pending
+                        ? (signal) => sendFeedback(m, signal)
                         : undefined
                     }
                   />

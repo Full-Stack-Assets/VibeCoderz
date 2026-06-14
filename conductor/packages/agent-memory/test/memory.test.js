@@ -23,6 +23,22 @@ test('persists routing metadata alongside the message', async () => {
   assert.equal(all.length, 1);
 });
 
+test('recordFeedback merges a quality label into the message meta', async () => {
+  const store = new InMemoryStore();
+  const conv = await store.createConversation();
+  const msg = await store.addMessage(conv.id, 'assistant', 'hi', { model: 'x' });
+
+  const ok = await store.recordFeedback(conv.id, msg.id, 'up');
+  assert.equal(ok, true);
+  const [stored] = await store.getMessages(conv.id);
+  assert.equal(stored.meta.feedback.signal, 'up');
+  assert.equal(stored.meta.model, 'x', 'existing meta is preserved');
+
+  // Unknown message / conversation → false, no throw.
+  assert.equal(await store.recordFeedback(conv.id, 'nope', 'down'), false);
+  assert.equal(await store.recordFeedback('nope', msg.id, 'down'), false);
+});
+
 test('logs tool executions', async () => {
   const store = new InMemoryStore();
   const conv = await store.createConversation();

@@ -102,4 +102,8 @@ export interface Msg {
   error?: boolean
   steps?: ToolStep[]
   escalation?: Escalation
+  /** Stored message id (from the server) — needed to attach feedback. */
+  storeId?: string
+  /** User quality label for this turn. */
+  feedback?: 'up' | 'down'
 }

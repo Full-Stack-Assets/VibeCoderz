@@ -195,6 +195,17 @@ export class PgStore {
     return rows;
   }
 
+  // Merge a quality-feedback signal into a message's meta (jsonb || merge).
+  async recordFeedback(conversationId, messageId, signal) {
+    const fb = JSON.stringify({ feedback: { signal, at: Date.now() } });
+    const { rowCount } = await this.q(
+      `UPDATE messages SET meta = coalesce(meta, '{}'::jsonb) || $3::jsonb
+       WHERE id = $1 AND conversation_id = $2`,
+      [messageId, conversationId, fb]
+    );
+    return rowCount > 0;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
 
   async upsertConversation({ id: cid, ownerId, title, updatedAt, snapshot }) {

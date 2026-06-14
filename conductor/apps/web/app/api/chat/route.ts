@@ -160,16 +160,16 @@ async function persist(
   userText: string,
   assistantText: string,
   meta: unknown
-): Promise<string | undefined> {
+): Promise<{ conversationId?: string; messageId?: string }> {
   try {
     const store = (await getStore()) as MemoryStore
     let id = conversationId
     if (!id) id = (await store.createConversation(userText.slice(0, 60))).id
     await store.addMessage(id, 'user', userText)
-    await store.addMessage(id, 'assistant', assistantText, meta)
-    return id
+    const asst = (await store.addMessage(id, 'assistant', assistantText, meta)) as { id?: string }
+    return { conversationId: id, messageId: asst?.id }
   } catch {
-    return conversationId
+    return { conversationId }
   }
 }
 
@@ -422,7 +422,7 @@ export async function POST(req: Request) {
         const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
         const newSpent = await meter.addUserUsage(user.id, fromPlan)
         const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
-        const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
+        const persisted = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
           domain: decision.classification?.domain,
@@ -440,7 +440,9 @@ export async function POST(req: Request) {
           escalation,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
-          conversationId,
+          conversationId: persisted.conversationId,
+          // The stored assistant message id, so the client can attach feedback.
+          messageId: persisted.messageId,
           stepCount: steps.length,
         })
         controller.close()

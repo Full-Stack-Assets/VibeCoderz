@@ -67,11 +67,13 @@ export function Message({
   onInspect,
   onEdit,
   onRegenerate,
+  onFeedback,
 }: {
   msg: Msg
   onInspect?: () => void
   onEdit?: (id: string, content: string) => void
   onRegenerate?: () => void
+  onFeedback?: (signal: 'up' | 'down') => void
 }) {
   // Hook must run for every message (Rules of Hooks); the ref only binds below.
   const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
@@ -260,6 +262,28 @@ export function Message({
               <button className="msg-action" title="Regenerate reply" onClick={onRegenerate}>
                 Regenerate
               </button>
+            )}
+            {onFeedback && (
+              <span className="feedback" role="group" aria-label="Rate this answer">
+                <button
+                  className="msg-action"
+                  title="Good answer"
+                  aria-pressed={msg.feedback === 'up'}
+                  style={{ opacity: msg.feedback && msg.feedback !== 'up' ? 0.4 : 1 }}
+                  onClick={() => onFeedback('up')}
+                >
+                  👍
+                </button>
+                <button
+                  className="msg-action"
+                  title="Bad answer"
+                  aria-pressed={msg.feedback === 'down'}
+                  style={{ opacity: msg.feedback && msg.feedback !== 'down' ? 0.4 : 1 }}
+                  onClick={() => onFeedback('down')}
+                >
+                  👎
+                </button>
+              </span>
             )}
           </div>
         )}

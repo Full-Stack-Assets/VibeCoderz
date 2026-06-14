@@ -210,4 +210,16 @@ export class InMemoryStore {
   async getMessages(conversationId) {
     return [...(this.messages.get(conversationId) || [])];
   }
+
+  // --- Quality feedback (flywheel labels) ---------------------------------
+  // Attach a user signal ('up' | 'down') to a stored message's meta, alongside
+  // the routing/escalation metadata already there. Returns true if applied.
+  async recordFeedback(conversationId, messageId, signal) {
+    const list = this.messages.get(conversationId);
+    if (!list) return false;
+    const msg = list.find((m) => m.id === messageId);
+    if (!msg) return false;
+    msg.meta = { ...(msg.meta || {}), feedback: { signal, at: Date.now() } };
+    return true;
+  }
 }
