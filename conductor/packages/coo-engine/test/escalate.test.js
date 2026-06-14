@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { completeWithEscalation, judgeAnswer, topModelId, parseScore } from '../src/escalate.js';
+import { completeWithEscalation, judgeAnswer, topModelId, parseScore, defaultJudgeModelId } from '../src/escalate.js';
 
 // A scriptable `complete` stub: returns a queued reply per model id, recording
 // every call. Lets us drive the escalate loop deterministically with no keys.
@@ -30,6 +30,14 @@ test('topModelId returns the highest-capability model and can exclude one', () =
   assert.notEqual(topModelId(TOP), TOP); // excluding the top yields a different model
 });
 
+test('defaultJudgeModelId is a cheaper mid-tier model, and is overridable', () => {
+  // Default judge is NOT the premium model (that would erode the savings).
+  assert.notEqual(defaultJudgeModelId({}), TOP);
+  // A valid override wins; an unknown id is ignored (falls back).
+  assert.equal(defaultJudgeModelId({ CONDUCTOR_JUDGE_MODEL: 'xai/grok-4.1-fast-reasoning' }), 'xai/grok-4.1-fast-reasoning');
+  assert.notEqual(defaultJudgeModelId({ CONDUCTOR_JUDGE_MODEL: 'not/a-real-model' }), 'not/a-real-model');
+});
+
 test('a passing answer is NOT escalated (one judge call, no second model)', async () => {
   const { complete, calls } = makeStub({
     [CHEAP]: { text: 'good answer', costUSD: 0.001 },
@@ -44,7 +52,8 @@ test('a passing answer is NOT escalated (one judge call, no second model)', asyn
         : { text: 'premium', costUSD: 0.02 },
   };
   const stub = makeStub(byModel);
-  const out = await completeWithEscalation(CHEAP, { messages: [{ role: 'user', content: 'hi' }] }, { complete: stub.complete });
+  // Pin TOP as the judge so the stub's combined TOP handler grades the answer.
+  const out = await completeWithEscalation(CHEAP, { messages: [{ role: 'user', content: 'hi' }] }, { complete: stub.complete, judgeModelId: TOP });
   assert.equal(out.escalation.escalated, false);
   assert.equal(out.escalation.score, 0.9);
   assert.equal(out.text, 'good answer');
@@ -62,7 +71,7 @@ test('a failing answer IS escalated to the top model, costs summed', async () =>
         : { text: 'expert answer', costUSD: 0.02 }, // escalated answer
   };
   const stub = makeStub(byModel);
-  const out = await completeWithEscalation(CHEAP, { messages: [{ role: 'user', content: 'hard q' }] }, { complete: stub.complete });
+  const out = await completeWithEscalation(CHEAP, { messages: [{ role: 'user', content: 'hard q' }] }, { complete: stub.complete, judgeModelId: TOP });
   assert.equal(out.escalation.escalated, true);
   assert.equal(out.escalation.firstModel, CHEAP);
   assert.equal(out.escalation.finalModel, TOP);

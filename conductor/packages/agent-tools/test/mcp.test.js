@@ -88,6 +88,22 @@ test('registerMcpTools namespaces tools and dispatches via the registry', async 
   assert.deepEqual(r, { ok: true, output: 'got:yo' });
 });
 
+test('long namespaced tool names are capped to the provider 64-char limit', async () => {
+  const longTool = 'x'.repeat(80);
+  const { fetchImpl } = mockFetch({
+    initialize: { capabilities: {} },
+    'tools/list': { tools: [{ name: longTool, inputSchema: { type: 'object', properties: {} } }] },
+    'tools/call': () => ({ content: [{ type: 'text', text: 'ok' }] }),
+  });
+  const registry = new ToolRegistry({ executor: new SimulatedExecutor() });
+  const { registered } = await registerMcpTools(registry, { CONDUCTOR_MCP: '[{"name":"srv","url":"u"}]' }, { fetchImpl });
+  assert.equal(registered.length, 1);
+  assert.ok(registered[0].length <= 64, `registered name length ${registered[0].length} <= 64`);
+  // Dispatch still works — the handler calls the original (long) tool name.
+  const r = await registry.run(registered[0], {});
+  assert.equal(r.ok, true);
+});
+
 test('a server that fails to connect is skipped, not fatal', async () => {
   const { fetchImpl } = mockFetch({}, { fail: true });
   const registry = new ToolRegistry({ executor: new SimulatedExecutor() });

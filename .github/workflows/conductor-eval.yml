@@ -50,6 +50,9 @@ jobs:
 
       - name: Live benchmark (real models + LLM judge)
         if: ${{ env.AI_GATEWAY_API_KEY != '' }}
+        # A transient gateway/provider hiccup shouldn't red the scheduled job;
+        # the synthetic report still uploads below.
+        continue-on-error: true
         run: pnpm eval -- --live > BENCHMARKS.live.md
 
       - name: Upload reports

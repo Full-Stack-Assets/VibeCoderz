@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, estimateTurnCostUSD } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -251,7 +251,7 @@ async function runAgentic(
     return { ...base, escalation: { evaluated: false, escalated: false } }
   }
 
-  const { score } = await judgeAnswer({ prompt: userPrompt, answer: first.text, judgeModel: topModelId() })
+  const { score } = await judgeAnswer({ prompt: userPrompt, answer: first.text, judgeModel: defaultJudgeModelId() })
   const target = topModelId(modelId)
   if (score == null || score >= escalateCfg.qualityBar || !target) {
     return {
