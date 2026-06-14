@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, estimateTurnCostUSD } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -100,6 +100,22 @@ const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS)
 // is a 0..1 quality score; tune with CONDUCTOR_QUALITY_BAR.
 const ESCALATE_ENABLED = (process.env.CONDUCTOR_ESCALATE || 'on').toLowerCase() !== 'off'
 const QUALITY_BAR = Math.min(1, Math.max(0, Number(process.env.CONDUCTOR_QUALITY_BAR) || 0.6))
+// Only verify/escalate models below this capability — re-checking an already
+// top-tier model just burns money. Mirrors the default in coo-engine/escalate.js.
+const ESCALATE_BELOW_CAPABILITY = 0.95
+
+type Escalation = Record<string, unknown> | null
+
+// Fill in human model labels so the client can render "tried <cheap> →
+// escalated to <premium>" without shipping the catalog. Shared by both paths.
+function enrichEscalation(esc: Escalation): Escalation {
+  if (!esc) return esc
+  const fm = esc.firstModel ? getModel(esc.firstModel as string) : null
+  const tm = esc.finalModel ? getModel(esc.finalModel as string) : null
+  if (fm) esc.firstLabel = fm.label
+  if (tm) esc.finalLabel = tm.label
+  return esc
+}
 
 // Build engine messages: fold text-file attachments into the text, and attach
 // images as image blocks so vision-capable models receive them.
@@ -155,7 +171,10 @@ async function persist(
   }
 }
 
-async function runAgentic(
+// One agentic run with `modelId`: live tool-calling if a key is set, else the
+// simulated planner. Owns its own sandbox executor (a fresh microVM per run, so
+// an escalated re-run starts clean) and disposes it afterwards.
+async function runAgenticOnce(
   modelId: string,
   messages: EngineMessage[],
   onStep: (step: ToolStep) => void,
@@ -188,6 +207,74 @@ async function runAgentic(
   } finally {
     // Stop the sandbox microVM (if the executor created one) after the turn.
     await (executor as { dispose?: () => Promise<void> }).dispose?.()
+  }
+}
+
+// Agentic turn with verify-and-escalate: run the routed (cheap) model's tool
+// loop, judge the final answer, and — if it misses the bar — re-run the whole
+// loop with the strongest model. Returns the same `escalation` audit shape as
+// the single-completion path, so the UI surface works for both, plus per-run
+// step counts for cost accounting.
+async function runAgentic(
+  modelId: string,
+  messages: EngineMessage[],
+  onStep: (step: ToolStep) => void,
+  maxTokens: number,
+  userPrompt: string,
+  escalateCfg: { enabled: boolean; qualityBar: number }
+): Promise<{
+  text: string
+  steps: ToolStep[]
+  simulated: boolean
+  simReason: string | null
+  escalation: Escalation
+  firstSteps: number
+  secondSteps: number
+}> {
+  const first = await runAgenticOnce(modelId, messages, onStep, maxTokens)
+  const routed = getModel(modelId)
+  const base = { ...first, firstSteps: first.steps.length, secondSteps: 0 }
+
+  // Only verify a real (non-simulated) answer from a non-top-tier model.
+  const eligible =
+    escalateCfg.enabled && !first.simulated && !!routed && routed.capability < ESCALATE_BELOW_CAPABILITY
+  if (!eligible) {
+    return { ...base, escalation: { evaluated: false, escalated: false } }
+  }
+
+  const { score } = await judgeAnswer({ prompt: userPrompt, answer: first.text, judgeModel: topModelId() })
+  const target = topModelId(modelId)
+  if (score == null || score >= escalateCfg.qualityBar || !target) {
+    return {
+      ...base,
+      escalation: {
+        evaluated: true,
+        escalated: false,
+        firstModel: modelId,
+        score,
+        qualityBar: escalateCfg.qualityBar,
+        ...(target ? {} : { reason: 'no higher model' }),
+      },
+    }
+  }
+
+  // Escalate: re-run the loop with the strongest model.
+  const second = await runAgenticOnce(target, messages, onStep, maxTokens)
+  return {
+    text: second.text,
+    steps: [...first.steps, ...second.steps],
+    simulated: second.simulated,
+    simReason: second.simReason,
+    firstSteps: first.steps.length,
+    secondSteps: second.steps.length,
+    escalation: {
+      evaluated: true,
+      escalated: true,
+      firstModel: modelId,
+      firstScore: score,
+      qualityBar: escalateCfg.qualityBar,
+      finalModel: target,
+    },
   }
 }
 
@@ -266,12 +353,29 @@ export async function POST(req: Request) {
         let escalation: Record<string, unknown> | null = null
 
         if (body.agentic) {
-          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }), MAX_OUTPUT_TOKENS)
+          const out = await runAgentic(
+            decision.model.id,
+            engineMessages,
+            (step) => send('tool', { step }),
+            MAX_OUTPUT_TOKENS,
+            lastUser(messages),
+            { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR }
+          )
           fullText = out.text
           steps = out.steps
           simulated = out.simulated
           simReason = out.simReason
-          costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
+          // Cost: the cheap run over its steps, plus — if we escalated — the
+          // premium run priced at the premium model's per-call estimate.
+          let cost = decision.estCostUSD * (out.firstSteps + 1)
+          if (out.escalation && out.escalation.escalated && out.escalation.finalModel) {
+            const top = getModel(out.escalation.finalModel as string)
+            const topEst = top ? estimateTurnCostUSD(top, lastUser(messages).length) : decision.estCostUSD
+            cost += topEst * (out.secondSteps + 1)
+          }
+          costUSD = Number(cost.toFixed(6))
+          escalation = enrichEscalation(out.escalation)
+          if (escalation) send('escalation', { escalation })
         } else {
           const opts = { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
           const result = (await (ESCALATE_ENABLED
@@ -287,16 +391,8 @@ export async function POST(req: Request) {
           simulated = result.simulated
           simReason = result.simReason ?? null
           costUSD = result.costUSD
-          escalation = result.escalation ?? null
-          // Enrich the audit with human model labels so the UI can render
-          // "tried <cheap> → escalated to <premium>" without a client catalog.
-          if (escalation) {
-            const fm = escalation.firstModel ? getModel(escalation.firstModel as string) : null
-            const tm = escalation.finalModel ? getModel(escalation.finalModel as string) : null
-            if (fm) escalation.firstLabel = fm.label
-            if (tm) escalation.finalLabel = tm.label
-            send('escalation', { escalation })
-          }
+          escalation = enrichEscalation(result.escalation ?? null)
+          if (escalation) send('escalation', { escalation })
         }
 
         // Surface why a turn simulated despite a configured key — the cause
