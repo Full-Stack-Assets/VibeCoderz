@@ -1,0 +1,63 @@
+name: Conductor Eval
+
+# Regenerates the routing benchmark. The synthetic benchmark is deterministic
+# (no keys) and runs on every trigger; the LIVE benchmark (real model calls +
+# LLM-judge oracle) runs only when an AI_GATEWAY_API_KEY secret is configured.
+# Reports are uploaded as artifacts (no commit-back), so this never needs write
+# access to the repo.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1' # Mondays 07:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'conductor/packages/eval/**'
+      - 'conductor/packages/coo-engine/src/catalog.js'
+      - '.github/workflows/conductor-eval.yml'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    env:
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+    defaults:
+      run:
+        working-directory: conductor
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: conductor/pnpm-lock.yaml
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Synthetic benchmark (deterministic, no keys)
+        run: pnpm eval:write
+
+      - name: Live benchmark (real models + LLM judge)
+        if: ${{ env.AI_GATEWAY_API_KEY != '' }}
+        run: pnpm eval -- --live > BENCHMARKS.live.md
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conductor-benchmarks
+          path: |
+            conductor/BENCHMARKS.md
+            conductor/BENCHMARKS.live.md
+          if-no-files-found: ignore

@@ -28,6 +28,17 @@ test('dataset is well-formed and covers every domain', () => {
   }
 });
 
+test('golden set is large enough and balanced across domains', () => {
+  assert.ok(DATASET.length >= 50, `dataset has ${DATASET.length} tasks (>= 50)`);
+  const ids = new Set(DATASET.map((t) => t.id));
+  assert.equal(ids.size, DATASET.length, 'task ids are unique');
+  const counts = {};
+  for (const t of DATASET) counts[t.domain] = (counts[t.domain] || 0) + 1;
+  for (const d of ['coding', 'reasoning', 'writing', 'analysis', 'research', 'data', 'vision']) {
+    assert.ok(counts[d] >= 4, `${d} has ${counts[d] || 0} tasks (>= 4)`);
+  }
+});
+
 test('synthetic oracle: capability dominates and stays in [0,1]', () => {
   const opus = getModel('anthropic/claude-opus-4.8');
   const grok = getModel('xai/grok-4.1-fast-reasoning');
