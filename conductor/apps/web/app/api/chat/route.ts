@@ -40,7 +40,16 @@ const SYSTEM =
   'list_files (sandbox), web_search/fetch_url (live research — cite sources), ' +
   'analyze_data (datasets), calculator, and current_time. Prefer a tool over ' +
   'guessing when a fact is current, computable, or verifiable. Be precise, ' +
-  'helpful, and concise.'
+  'helpful, and concise.\n\n' +
+  'Use tools efficiently — every tool call spends a step and real money:\n' +
+  '- Decide the full set of files up front, then write each file exactly ONCE ' +
+  'with its complete, final contents. Never rewrite a file you just wrote.\n' +
+  '- After writing, run or test the code before making any further edits. Let ' +
+  'real command output — not second-guessing — drive changes.\n' +
+  '- If a command surfaces an error, make a targeted fix to the SPECIFIC file at ' +
+  'fault; do not regenerate files that are already correct, and never repeat an ' +
+  'identical write.\n' +
+  '- Stop and give a final answer as soon as the task is verified working.'
 
 interface Attachment {
   kind: 'image' | 'text'
@@ -73,6 +82,18 @@ interface EngineMessage {
 }
 
 const MAX_TEXT_ATTACH = 20_000
+
+// Max tool steps an agentic turn may take before it must answer. The loop's
+// own default is a conservative 6, which a real coding task (sandbox → write →
+// install → run → fix) outgrows quickly, leaving the turn cut off mid-task.
+// Override with CONDUCTOR_MAX_STEPS; cost is still metered per step.
+const MAX_AGENTIC_STEPS = Math.max(1, Number(process.env.CONDUCTOR_MAX_STEPS) || 12)
+
+// Max output tokens per model call. The library default of 1024 truncates real
+// answers (and large tool-call args) mid-output. Override with
+// CONDUCTOR_MAX_TOKENS. This is a ceiling, not a target — cost scales with the
+// tokens actually produced, so raising it only prevents truncation.
+const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS) || 4096)
 
 // Build engine messages: fold text-file attachments into the text, and attach
 // images as image blocks so vision-capable models receive them.
@@ -131,26 +152,33 @@ async function persist(
 async function runAgentic(
   modelId: string,
   messages: EngineMessage[],
-  onStep: (step: ToolStep) => void
-): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
+  onStep: (step: ToolStep) => void,
+  maxTokens: number
+): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
+  let simReason: string | null = null
   try {
-    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
+    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS, maxTokens })
     if (livePlanner) {
       try {
-        const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep })) as {
+        const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
           text: string
           steps: ToolStep[]
         }
-        return { ...out, simulated: false }
-      } catch {
-        // fall through to simulation on any live-path error
+        return { ...out, simulated: false, simReason: null }
+      } catch (err) {
+        // Don't let a live-path failure silently look like simulation — capture
+        // why so "key set but still simulating" is diagnosable downstream.
+        simReason = `live tool-calling failed: ${(err as Error)?.message ?? String(err)}`
+        console.warn(`[chat] ${simReason}; falling back to simulated planner.`)
       }
+    } else {
+      simReason = 'no provider credential for live tool-calling (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)'
     }
     const planner = makeSimulatedPlanner(messages) as unknown as Planner
-    const out = (await runAgenticTurn({ planner, registry, onStep })) as { text: string; steps: ToolStep[] }
-    return { ...out, simulated: true }
+    const out = (await runAgenticTurn({ planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as { text: string; steps: ToolStep[] }
+    return { ...out, simulated: true, simReason }
   } finally {
     // Stop the sandbox microVM (if the executor created one) after the turn.
     await (executor as { dispose?: () => Promise<void> }).dispose?.()
@@ -228,22 +256,32 @@ export async function POST(req: Request) {
         let steps: ToolStep[] = []
         let simulated = false
         let costUSD = 0
+        let simReason: string | null = null
 
         if (body.agentic) {
-          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }))
+          const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }), MAX_OUTPUT_TOKENS)
           fullText = out.text
           steps = out.steps
           simulated = out.simulated
+          simReason = out.simReason
           costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
         } else {
-          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: 1024 })) as {
+          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS })) as {
             text: string
             costUSD: number
             simulated: boolean
+            simReason?: string | null
           }
           fullText = result.text
           simulated = result.simulated
+          simReason = result.simReason ?? null
           costUSD = result.costUSD
+        }
+
+        // Surface why a turn simulated despite a configured key — the cause
+        // (e.g. a gateway model-slug 404) is otherwise invisible to the client.
+        if (simulated && simReason) {
+          console.warn(`[chat] simulated turn for ${decision.model.id}: ${simReason}`)
         }
 
         // 4) Stream the answer progressively.
@@ -269,6 +307,7 @@ export async function POST(req: Request) {
         send('done', {
           costUSD,
           simulated,
+          simReason,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
           conversationId,
