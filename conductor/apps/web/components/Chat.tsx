@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
+import { MemoryPanel } from './MemoryPanel'
 import { Sandbox } from './Sandbox'
 import { Sidebar } from './Sidebar'
 import {
@@ -822,6 +823,7 @@ export function Chat() {
 
           <aside className={`panel ${panelOpen ? 'show' : ''}`}>
             <OrchestrationPanel decision={decision} audit={audit} />
+            <MemoryPanel />
             <Sandbox />
           </aside>
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
