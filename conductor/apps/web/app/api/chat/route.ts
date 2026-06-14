@@ -74,6 +74,12 @@ interface EngineMessage {
 
 const MAX_TEXT_ATTACH = 20_000
 
+// Max tool steps an agentic turn may take before it must answer. The loop's
+// own default is a conservative 6, which a real coding task (sandbox → write →
+// install → run → fix) outgrows quickly, leaving the turn cut off mid-task.
+// Override with CONDUCTOR_MAX_STEPS; cost is still metered per step.
+const MAX_AGENTIC_STEPS = Math.max(1, Number(process.env.CONDUCTOR_MAX_STEPS) || 12)
+
 // Build engine messages: fold text-file attachments into the text, and attach
 // images as image blocks so vision-capable models receive them.
 function buildEngineMessages(messages: InMessage[]): EngineMessage[] {
@@ -140,7 +146,7 @@ async function runAgentic(
     const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
     if (livePlanner) {
       try {
-        const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep })) as {
+        const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
           text: string
           steps: ToolStep[]
         }
@@ -155,7 +161,7 @@ async function runAgentic(
       simReason = 'no provider credential for live tool-calling (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)'
     }
     const planner = makeSimulatedPlanner(messages) as unknown as Planner
-    const out = (await runAgenticTurn({ planner, registry, onStep })) as { text: string; steps: ToolStep[] }
+    const out = (await runAgenticTurn({ planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as { text: string; steps: ToolStep[] }
     return { ...out, simulated: true, simReason }
   } finally {
     // Stop the sandbox microVM (if the executor created one) after the turn.

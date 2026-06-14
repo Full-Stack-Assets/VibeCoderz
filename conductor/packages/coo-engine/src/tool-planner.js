@@ -194,7 +194,12 @@ export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseUR
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...headers },
       body: JSON.stringify({
         model: wire,
-        max_tokens: maxTokens,
+        // OpenAI's GPT-5 family (incl. gpt-5.3-codex) rejects `max_tokens` on
+        // Chat Completions and requires `max_completion_tokens`; other providers
+        // (xAI, Google via gateway) still take `max_tokens`.
+        ...(model.provider === 'openai'
+          ? { max_completion_tokens: maxTokens }
+          : { max_tokens: maxTokens }),
         messages: convo,
         tools: openaiTools,
         tool_choice: 'auto',

@@ -198,7 +198,12 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
       // Native providers want the bare model id; gateways want the full
       // `provider/model` catalog id. `modelName` overrides when given.
       model: modelName || wireModelId(model),
-      max_tokens: maxTokens,
+      // OpenAI's GPT-5 family (incl. gpt-5.3-codex) rejects `max_tokens` on Chat
+      // Completions with a 400 and requires `max_completion_tokens`. Other
+      // providers (xAI, Google via gateway) still take `max_tokens`.
+      ...(model.provider === 'openai'
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
