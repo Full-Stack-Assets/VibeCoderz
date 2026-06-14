@@ -23,6 +23,13 @@ export async function createStore({ databaseUrl = process.env.DATABASE_URL } = {
           `(${err?.message || err}); falling back to in-memory store.`
       );
     }
+  } else if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Deployed without a database: the in-memory store is per-instance and
+    // ephemeral, so history, per-turn routing/quality metadata, and feedback
+    // labels won't persist. Surface it once per process so it's visible in logs.
+    console.warn(
+      '[agent-memory] DATABASE_URL is not set — using the ephemeral in-memory store; conversation history, per-turn routing/quality metadata, and feedback labels will NOT persist across instances or restarts. Set DATABASE_URL (Postgres) to retain them.'
+    );
   }
   return new InMemoryStore();
 }
