@@ -254,6 +254,7 @@ export async function complete(modelId, opts = {}) {
   const gw = gatewayConfig();
   const canGoLive = gw || hasKey(model.provider);
 
+  let liveError = null;
   if (canGoLive) {
     // A live attempt can still fail at the network/provider edge (gateway not
     // funded, model temporarily unavailable, transient 5xx past retries). Rather
@@ -288,11 +289,12 @@ export async function complete(modelId, opts = {}) {
       } else {
         throw new Error(`no transport for provider ${model.provider}`);
       }
-      return { ...result, model: model.id, provider, costUSD: meter(model, result.usage), simulated: false };
+      return { ...result, model: model.id, provider, costUSD: meter(model, result.usage), simulated: false, simReason: null };
     } catch (err) {
+      liveError = String(err?.message || err);
       console.warn(
         `[coo-engine] live completion failed for ${model.id} ` +
-          `(${err?.message || err}); falling back to simulation.`
+          `(${liveError}); falling back to simulation.`
       );
     }
   }
@@ -304,5 +306,10 @@ export async function complete(modelId, opts = {}) {
     provider: gw ? `gateway:${gw.kind}` : model.provider,
     costUSD: meter(model, sim.usage),
     simulated: true,
+    // Why this turn simulated, so "key set but still simulating" is diagnosable:
+    // a swallowed live error (the usual cause) vs. no credential at all.
+    simReason: liveError
+      ? `live call failed: ${liveError}`
+      : 'no provider credential configured (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)',
   };
 }

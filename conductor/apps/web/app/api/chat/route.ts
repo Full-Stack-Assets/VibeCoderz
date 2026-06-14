@@ -132,9 +132,10 @@ async function runAgentic(
   modelId: string,
   messages: EngineMessage[],
   onStep: (step: ToolStep) => void
-): Promise<{ text: string; steps: ToolStep[]; simulated: boolean }> {
+): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
+  let simReason: string | null = null
   try {
     const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS })
     if (livePlanner) {
@@ -143,14 +144,19 @@ async function runAgentic(
           text: string
           steps: ToolStep[]
         }
-        return { ...out, simulated: false }
-      } catch {
-        // fall through to simulation on any live-path error
+        return { ...out, simulated: false, simReason: null }
+      } catch (err) {
+        // Don't let a live-path failure silently look like simulation — capture
+        // why so "key set but still simulating" is diagnosable downstream.
+        simReason = `live tool-calling failed: ${(err as Error)?.message ?? String(err)}`
+        console.warn(`[chat] ${simReason}; falling back to simulated planner.`)
       }
+    } else {
+      simReason = 'no provider credential for live tool-calling (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)'
     }
     const planner = makeSimulatedPlanner(messages) as unknown as Planner
     const out = (await runAgenticTurn({ planner, registry, onStep })) as { text: string; steps: ToolStep[] }
-    return { ...out, simulated: true }
+    return { ...out, simulated: true, simReason }
   } finally {
     // Stop the sandbox microVM (if the executor created one) after the turn.
     await (executor as { dispose?: () => Promise<void> }).dispose?.()
@@ -228,22 +234,32 @@ export async function POST(req: Request) {
         let steps: ToolStep[] = []
         let simulated = false
         let costUSD = 0
+        let simReason: string | null = null
 
         if (body.agentic) {
           const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }))
           fullText = out.text
           steps = out.steps
           simulated = out.simulated
+          simReason = out.simReason
           costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
         } else {
           const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: 1024 })) as {
             text: string
             costUSD: number
             simulated: boolean
+            simReason?: string | null
           }
           fullText = result.text
           simulated = result.simulated
+          simReason = result.simReason ?? null
           costUSD = result.costUSD
+        }
+
+        // Surface why a turn simulated despite a configured key — the cause
+        // (e.g. a gateway model-slug 404) is otherwise invisible to the client.
+        if (simulated && simReason) {
+          console.warn(`[chat] simulated turn for ${decision.model.id}: ${simReason}`)
         }
 
         // 4) Stream the answer progressively.
@@ -269,6 +285,7 @@ export async function POST(req: Request) {
         send('done', {
           costUSD,
           simulated,
+          simReason,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
           conversationId,
