@@ -306,6 +306,8 @@ export function Chat() {
           } else if (event === 'tool') {
             const step = data.step as ToolStep
             patch(pendingId, (m) => ({ ...m, pending: false, steps: [...(m.steps || []), step] }))
+          } else if (event === 'escalation') {
+            patch(pendingId, (m) => ({ ...m, escalation: data.escalation as Msg['escalation'] }))
           } else if (event === 'text') {
             patch(pendingId, (m) => ({ ...m, pending: false, content: m.content + String(data.delta ?? '') }))
           } else if (event === 'done') {

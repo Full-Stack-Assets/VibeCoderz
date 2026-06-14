@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -288,9 +288,15 @@ export async function POST(req: Request) {
           simReason = result.simReason ?? null
           costUSD = result.costUSD
           escalation = result.escalation ?? null
-          // Surface the verify/escalate decision so the client can show
-          // "tried <cheap> → escalated to <premium> because …".
-          if (escalation) send('escalation', { escalation })
+          // Enrich the audit with human model labels so the UI can render
+          // "tried <cheap> → escalated to <premium>" without a client catalog.
+          if (escalation) {
+            const fm = escalation.firstModel ? getModel(escalation.firstModel as string) : null
+            const tm = escalation.finalModel ? getModel(escalation.finalModel as string) : null
+            if (fm) escalation.firstLabel = fm.label
+            if (tm) escalation.finalLabel = tm.label
+            send('escalation', { escalation })
+          }
         }
 
         // Surface why a turn simulated despite a configured key — the cause
