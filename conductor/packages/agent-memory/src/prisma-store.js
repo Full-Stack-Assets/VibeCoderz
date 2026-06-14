@@ -55,6 +55,21 @@ export class PrismaStore {
     });
   }
 
+  // --- Durable per-user memory (personalization) --------------------------
+
+  async addMemory(userId, text) {
+    return this.db.userMemory.create({ data: { userId, text: String(text) } });
+  }
+
+  async listMemories(userId) {
+    return this.db.userMemory.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const r = await this.db.userMemory.deleteMany({ where: { id: memoryId, userId } });
+    return r.count > 0;
+  }
+
   // Merge a quality-feedback signal into a message's meta (read-merge-write,
   // since Prisma has no deep-merge for a Json column).
   async recordFeedback(conversationId, messageId, signal) {

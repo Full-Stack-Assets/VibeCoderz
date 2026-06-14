@@ -180,7 +180,8 @@ async function runAgenticOnce(
   modelId: string,
   messages: EngineMessage[],
   onStep: (step: ToolStep) => void,
-  maxTokens: number
+  maxTokens: number,
+  system: string
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
@@ -193,7 +194,7 @@ async function runAgenticOnce(
   const tools = registry.list()
   let simReason: string | null = null
   try {
-    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools, maxTokens })
+    const livePlanner = makeLiveToolPlanner({ modelId, system, messages, tools, maxTokens })
     if (livePlanner) {
       try {
         const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
@@ -230,7 +231,8 @@ async function runAgentic(
   onStep: (step: ToolStep) => void,
   maxTokens: number,
   userPrompt: string,
-  escalateCfg: { enabled: boolean; qualityBar: number }
+  escalateCfg: { enabled: boolean; qualityBar: number },
+  system: string
 ): Promise<{
   text: string
   steps: ToolStep[]
@@ -240,7 +242,7 @@ async function runAgentic(
   firstSteps: number
   secondSteps: number
 }> {
-  const first = await runAgenticOnce(modelId, messages, onStep, maxTokens)
+  const first = await runAgenticOnce(modelId, messages, onStep, maxTokens, system)
   const routed = getModel(modelId)
   const base = { ...first, firstSteps: first.steps.length, secondSteps: 0 }
 
@@ -268,7 +270,7 @@ async function runAgentic(
   }
 
   // Escalate: re-run the loop with the strongest model.
-  const second = await runAgenticOnce(target, messages, onStep, maxTokens)
+  const second = await runAgenticOnce(target, messages, onStep, maxTokens, system)
   return {
     text: second.text,
     steps: [...first.steps, ...second.steps],
@@ -316,6 +318,24 @@ export async function POST(req: Request) {
 
   const engineMessages = buildEngineMessages(messages)
   const hasImages = hasImageAttachment(messages)
+
+  // Personalization: fold the user's durable memories into the system prompt so
+  // every turn is informed by their saved preferences. Best-effort — never block
+  // a turn on memory.
+  let systemPrompt = SYSTEM
+  try {
+    const memStore = (await getStore()) as { listMemories?: (id: string) => Promise<Array<{ text: string }>> }
+    const mems = (await memStore.listMemories?.(user.id)) ?? []
+    if (mems.length) {
+      const block = mems.slice(0, 50).map((m) => `- ${m.text}`).join('\n')
+      systemPrompt =
+        `${SYSTEM}\n\nWhat you know about this user (their saved preferences — ` +
+        `honor them unless the current request overrides):\n${block}`
+    }
+  } catch {
+    /* memory is best-effort */
+  }
+
   const enc = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -368,7 +388,8 @@ export async function POST(req: Request) {
             (step) => send('tool', { step }),
             MAX_OUTPUT_TOKENS,
             lastUser(messages),
-            { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR }
+            { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR },
+            systemPrompt
           )
           fullText = out.text
           steps = out.steps
@@ -386,7 +407,7 @@ export async function POST(req: Request) {
           escalation = enrichEscalation(out.escalation)
           if (escalation) send('escalation', { escalation })
         } else {
-          const opts = { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
+          const opts = { system: systemPrompt, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
           const result = (await (ESCALATE_ENABLED
             ? completeWithEscalation(decision.model.id, opts, { qualityBar: QUALITY_BAR })
             : complete(decision.model.id, opts))) as {

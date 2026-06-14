@@ -23,6 +23,24 @@ test('persists routing metadata alongside the message', async () => {
   assert.equal(all.length, 1);
 });
 
+test('per-user memories: add, list (scoped per user), and delete', async () => {
+  const store = new InMemoryStore();
+  const a = await store.addMemory('user_a', 'prefers TypeScript');
+  await store.addMemory('user_a', 'likes concise answers');
+  await store.addMemory('user_b', 'works in Go');
+
+  const aList = await store.listMemories('user_a');
+  assert.equal(aList.length, 2, 'memories are scoped per user');
+  assert.equal((await store.listMemories('user_b')).length, 1);
+  assert.ok(aList.every((m) => m.id && m.text && m.createdAt));
+
+  assert.equal(await store.deleteMemory('user_a', a.id), true);
+  assert.equal((await store.listMemories('user_a')).length, 1);
+  // Deleting a non-existent memory, or one owned by another user, is a no-op.
+  assert.equal(await store.deleteMemory('user_a', 'nope'), false);
+  assert.equal(await store.deleteMemory('user_b', a.id), false);
+});
+
 test('recordFeedback merges a quality label into the message meta', async () => {
   const store = new InMemoryStore();
   const conv = await store.createConversation();

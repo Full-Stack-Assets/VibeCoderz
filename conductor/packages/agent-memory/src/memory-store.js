@@ -19,6 +19,7 @@ export class InMemoryStore {
     this.users = new Map(); // id -> User
     this.usersByEmail = new Map(); // lowercased email -> id
     this.sessions = new Map(); // token -> { token, userId, expiresAt }
+    this.memories = new Map(); // userId -> [{ id, text, createdAt }] durable prefs
   }
 
   // --- Accounts & sessions (email + password auth) ------------------------
@@ -209,6 +210,31 @@ export class InMemoryStore {
 
   async getMessages(conversationId) {
     return [...(this.messages.get(conversationId) || [])];
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+  // Long-lived preferences/facts, injected into every turn's system prompt so
+  // turn N+1 is smarter than turn 1. Separate from conversation transcripts.
+
+  async addMemory(userId, text) {
+    const list = this.memories.get(userId) || [];
+    const mem = { id: nextId('mem'), text: String(text), createdAt: Date.now() };
+    list.push(mem);
+    this.memories.set(userId, list);
+    return mem;
+  }
+
+  async listMemories(userId) {
+    return [...(this.memories.get(userId) || [])];
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const list = this.memories.get(userId);
+    if (!list) return false;
+    const i = list.findIndex((m) => m.id === memoryId);
+    if (i === -1) return false;
+    list.splice(i, 1);
+    return true;
   }
 
   // --- Quality feedback (flywheel labels) ---------------------------------

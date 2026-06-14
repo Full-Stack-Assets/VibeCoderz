@@ -89,6 +89,13 @@ CREATE TABLE IF NOT EXISTS tool_executions (
   created_at bigint NOT NULL,
   seq bigserial
 );
+CREATE TABLE IF NOT EXISTS user_memories (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text text NOT NULL,
+  created_at bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS user_memories_user ON user_memories (user_id, created_at);
 `;
 
 const mapUser = (r) =>
@@ -193,6 +200,34 @@ export class PgStore {
       [conversationId]
     );
     return rows;
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+
+  async addMemory(userId, text) {
+    const mid = id('mem');
+    const now = Date.now();
+    await this.q(
+      `INSERT INTO user_memories (id, user_id, text, created_at) VALUES ($1, $2, $3, $4)`,
+      [mid, userId, String(text), now]
+    );
+    return { id: mid, text: String(text), createdAt: now };
+  }
+
+  async listMemories(userId) {
+    const { rows } = await this.q(
+      `SELECT id, text, created_at FROM user_memories WHERE user_id = $1 ORDER BY created_at ASC`,
+      [userId]
+    );
+    return rows.map((r) => ({ id: r.id, text: r.text, createdAt: Number(r.created_at) }));
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const { rowCount } = await this.q(
+      `DELETE FROM user_memories WHERE id = $1 AND user_id = $2`,
+      [memoryId, userId]
+    );
+    return rowCount > 0;
   }
 
   // Merge a quality-feedback signal into a message's meta (jsonb || merge).
