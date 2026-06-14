@@ -22,6 +22,23 @@ import { runWebTool } from './web-tools.js';
 const ok = (output, extra = {}) => ({ ok: true, output, ...extra });
 const fail = (error) => ({ ok: false, error: String(error?.message || error) });
 
+// Some models emit HTML-escaped source in their tool-call arguments — `&lt;` for
+// `<`, `&amp;` for `&`, etc. Written verbatim, that corrupts code on disk and
+// breaks execution (a `<` turned into `&lt;` is a syntax error). Decode the
+// common entities so written files contain the literal characters the model
+// intended. Trade-off: a file that genuinely wants the literal text "&lt;" gets
+// decoded — but for a code sandbox, runnable source is the right default.
+// `&amp;` is decoded last so single-escaped input isn't double-decoded.
+function normalizeFileContent(content) {
+  return String(content ?? '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&amp;/g, '&');
+}
+
 // Tools that behave identically regardless of executor: pure compute (always
 // real) and web tools (real when CONDUCTOR_WEB=live, simulated otherwise).
 // Returns a result, or null when `name` isn't a shared tool.
@@ -46,9 +63,11 @@ export class SimulatedExecutor {
           `[simulated] $ ${args.command}\n` +
             `(no sandbox configured — set CONDUCTOR_SANDBOX=local to run for real)`
         );
-      case 'write_file':
-        this.files.set(args.path, args.content ?? '');
-        return ok(`[simulated] wrote ${(args.content ?? '').length} bytes to ${args.path}`);
+      case 'write_file': {
+        const content = normalizeFileContent(args.content);
+        this.files.set(args.path, content);
+        return ok(`[simulated] wrote ${content.length} bytes to ${args.path}`);
+      }
       case 'read_file':
         return this.files.has(args.path)
           ? ok(this.files.get(args.path))
@@ -92,9 +111,10 @@ export class LocalSandboxExecutor {
       switch (name) {
         case 'write_file': {
           const abs = this._resolve(args.path);
+          const content = normalizeFileContent(args.content);
           await fs.mkdir(path.dirname(abs), { recursive: true });
-          await fs.writeFile(abs, args.content ?? '');
-          return ok(`wrote ${(args.content ?? '').length} bytes to ${args.path}`, { path: args.path });
+          await fs.writeFile(abs, content);
+          return ok(`wrote ${content.length} bytes to ${args.path}`, { path: args.path });
         }
         case 'read_file': {
           const abs = this._resolve(args.path);
@@ -191,7 +211,7 @@ export class VercelSandboxExecutor {
       const sandbox = await this._sandboxPromise();
       switch (name) {
         case 'write_file': {
-          const content = args.content ?? '';
+          const content = normalizeFileContent(args.content);
           await sandbox.writeFiles([{ path: args.path, content: Buffer.from(content) }]);
           return ok(`wrote ${content.length} bytes to ${args.path}`, { path: args.path });
         }
