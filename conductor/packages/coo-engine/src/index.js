@@ -14,6 +14,7 @@ export { complete, simulate, gatewayConfig, messagesHaveImages, contentToText, t
 export { makeAnthropicToolPlanner, makeOpenAIToolPlanner, makeLiveToolPlanner, canPlanLive } from './tool-planner.js';
 export { classifyTurn } from './classify.js';
 export { MODEL_CATALOG, getModel, modelsAsAgents, visionModels } from './catalog.js';
+export { completeWithEscalation, judgeAnswer, topModelId, parseScore } from './escalate.js';
 export {
   calculateFitnessScore,
   findBestAgentForTask,

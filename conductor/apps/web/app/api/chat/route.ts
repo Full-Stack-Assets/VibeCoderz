@@ -1,4 +1,4 @@
-import { routeTurn, complete, makeLiveToolPlanner } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -94,6 +94,12 @@ const MAX_AGENTIC_STEPS = Math.max(1, Number(process.env.CONDUCTOR_MAX_STEPS) ||
 // CONDUCTOR_MAX_TOKENS. This is a ceiling, not a target — cost scales with the
 // tokens actually produced, so raising it only prevents truncation.
 const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS) || 4096)
+
+// Verify-and-escalate: judge a cheap model's answer and escalate to a premium
+// model only when it misses the bar (off with CONDUCTOR_ESCALATE=off). The bar
+// is a 0..1 quality score; tune with CONDUCTOR_QUALITY_BAR.
+const ESCALATE_ENABLED = (process.env.CONDUCTOR_ESCALATE || 'on').toLowerCase() !== 'off'
+const QUALITY_BAR = Math.min(1, Math.max(0, Number(process.env.CONDUCTOR_QUALITY_BAR) || 0.6))
 
 // Build engine messages: fold text-file attachments into the text, and attach
 // images as image blocks so vision-capable models receive them.
@@ -257,6 +263,7 @@ export async function POST(req: Request) {
         let simulated = false
         let costUSD = 0
         let simReason: string | null = null
+        let escalation: Record<string, unknown> | null = null
 
         if (body.agentic) {
           const out = await runAgentic(decision.model.id, engineMessages, (step) => send('tool', { step }), MAX_OUTPUT_TOKENS)
@@ -266,16 +273,24 @@ export async function POST(req: Request) {
           simReason = out.simReason
           costUSD = Number((decision.estCostUSD * (steps.length + 1)).toFixed(6))
         } else {
-          const result = (await complete(decision.model.id, { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS })) as {
+          const opts = { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
+          const result = (await (ESCALATE_ENABLED
+            ? completeWithEscalation(decision.model.id, opts, { qualityBar: QUALITY_BAR })
+            : complete(decision.model.id, opts))) as {
             text: string
             costUSD: number
             simulated: boolean
             simReason?: string | null
+            escalation?: Record<string, unknown>
           }
           fullText = result.text
           simulated = result.simulated
           simReason = result.simReason ?? null
           costUSD = result.costUSD
+          escalation = result.escalation ?? null
+          // Surface the verify/escalate decision so the client can show
+          // "tried <cheap> → escalated to <premium> because …".
+          if (escalation) send('escalation', { escalation })
         }
 
         // Surface why a turn simulated despite a configured key — the cause
@@ -303,11 +318,15 @@ export async function POST(req: Request) {
           costUSD,
           simulated,
           agentic: !!body.agentic,
+          // Routing-quality signal for the measured-advantage flywheel (Phase 1):
+          // the judged quality and whether we had to escalate, per turn.
+          escalation,
         })
         send('done', {
           costUSD,
           simulated,
           simReason,
+          escalation,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
           conversationId,
