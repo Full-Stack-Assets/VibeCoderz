@@ -6,6 +6,7 @@ import {
   TOOLS,
   runAgenticTurn,
   makeSimulatedPlanner,
+  registerMcpTools,
 } from '@conductor/agent-tools'
 import type { RouteDecision } from '@/lib/types'
 import { currentUser } from '@/lib/server/session'
@@ -38,9 +39,10 @@ const SYSTEM =
   'constraint-optimized orchestrator that picked the most cost-effective model ' +
   'capable of the request. You can use tools: run_command/write_file/read_file/' +
   'list_files (sandbox), web_search/fetch_url (live research — cite sources), ' +
-  'analyze_data (datasets), calculator, and current_time. Prefer a tool over ' +
-  'guessing when a fact is current, computable, or verifiable. Be precise, ' +
-  'helpful, and concise.\n\n' +
+  'analyze_data (datasets), calculator, and current_time. Additional tools from ' +
+  'connected integrations (named like <service>__<tool>) may also be available — ' +
+  'use them when relevant. Prefer a tool over guessing when a fact is current, ' +
+  'computable, or verifiable. Be precise, helpful, and concise.\n\n' +
   'Use tools efficiently — every tool call spends a step and real money:\n' +
   '- Decide the full set of files up front, then write each file exactly ONCE ' +
   'with its complete, final contents. Never rewrite a file you just wrote.\n' +
@@ -182,9 +184,16 @@ async function runAgenticOnce(
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
+  // Pull in any configured MCP servers' tools (no-op when CONDUCTOR_MCP is
+  // unset). A server that fails to connect is skipped, never fatal.
+  const mcp = await registerMcpTools(registry, process.env)
+  if (mcp.errors.length) console.warn('[chat] MCP connect errors:', mcp.errors)
+  // The planner must see every tool it can dispatch — built-ins + MCP — so the
+  // model knows the remote tools exist (registry.run already routes them).
+  const tools = registry.list()
   let simReason: string | null = null
   try {
-    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools: TOOLS, maxTokens })
+    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools, maxTokens })
     if (livePlanner) {
       try {
         const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
