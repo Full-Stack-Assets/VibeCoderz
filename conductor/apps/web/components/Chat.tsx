@@ -6,6 +6,7 @@ import { CodeIcon, SearchIcon, BarsIcon, EyeIcon } from './icons'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
 import { MemoryPanel } from './MemoryPanel'
+import { SponsoredSlot } from './SponsoredSlot'
 import { Sandbox } from './Sandbox'
 import { Sidebar } from './Sidebar'
 import {
@@ -732,6 +733,7 @@ export function Chat() {
                     </button>
                   ))}
                 </div>
+                <SponsoredSlot />
               </div>
             ) : (
               <div className="thread">

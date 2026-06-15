@@ -724,6 +724,24 @@ textarea:focus-visible, [tabindex]:focus-visible {
 }
 .topup-upgrade:hover { background: var(--coral-press); }
 
+/* ---- Native sponsored slot (free tier, empty state) ---------------------- */
+.sponsored {
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  max-width: 440px; margin-top: var(--space-2);
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong); background: var(--surface);
+  color: var(--text-soft); text-decoration: none; text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sponsored:hover { border-color: var(--coral); background: var(--surface-sunk); }
+.sponsored-tag {
+  flex: 0 0 auto; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint); border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px;
+}
+.sponsored-body { display: flex; flex-direction: column; gap: 1px; font-size: 13px; line-height: 1.4; }
+.sponsored-blurb { color: var(--muted); font-size: 12px; }
+.sponsored-arrow { flex: 0 0 auto; color: var(--faint); }
+
 /* ---- "You saved $X" value badge (header) --------------------------------- */
 .saved-badge {
   display: inline-flex; align-items: center;
