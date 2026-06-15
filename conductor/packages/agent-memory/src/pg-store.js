@@ -50,12 +50,14 @@ CREATE TABLE IF NOT EXISTS users (
   spent_usd double precision NOT NULL DEFAULT 0,
   spend_period_start bigint NOT NULL DEFAULT 0,
   topup_credit_usd double precision NOT NULL DEFAULT 0,
+  saved_usd double precision NOT NULL DEFAULT 0,
   created_at bigint NOT NULL
 );
 -- Backfill columns on databases created before usage metering existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS saved_usd double precision NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -122,6 +124,7 @@ const mapUser = (r) =>
     stripeCustomerId: r.stripe_customer_id,
     subscriptionStatus: r.subscription_status,
     topupUSD: Number(r.topup_credit_usd) || 0,
+    savedUSD: Number(r.saved_usd) || 0,
     createdAt: Number(r.created_at),
   };
 
@@ -459,5 +462,18 @@ export class PgStore {
       [userId, deltaUSD || 0]
     );
     return rows[0] ? Number(rows[0].topup_credit_usd) : 0;
+  }
+
+  async getUserSavings(userId) {
+    const { rows } = await this.q(`SELECT saved_usd FROM users WHERE id = $1`, [userId]);
+    return rows[0] ? Number(rows[0].saved_usd) || 0 : 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET saved_usd = GREATEST(0, saved_usd + $2) WHERE id = $1 RETURNING saved_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].saved_usd) : 0;
   }
 }

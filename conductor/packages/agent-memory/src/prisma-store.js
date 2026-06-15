@@ -214,4 +214,15 @@ export class PrismaStore {
     await this.db.session.delete({ where: { token } }).catch(() => {});
     return true;
   }
+
+  // Lifetime routing savings (vs always-premium) — the value receipt.
+  async getUserSavings(userId) {
+    const u = await this.db.user.findUnique({ where: { id: userId } });
+    return u?.savedUSD || 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const u = await this.db.user.update({ where: { id: userId }, data: { savedUSD: { increment: deltaUSD || 0 } } });
+    return u.savedUSD;
+  }
 }

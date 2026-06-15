@@ -67,6 +67,8 @@ export interface User {
   subscriptionStatus: string | null
   /** Remaining pay-as-you-go top-up credit (USD). */
   topupUSD: number
+  /** Lifetime routing savings vs. always-premium (USD) — the value receipt. */
+  savedUSD: number
 }
 
 /**

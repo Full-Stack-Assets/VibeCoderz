@@ -65,6 +65,18 @@ test('api keys: create stores only a hash, resolve finds the owner, list hides t
   assert.equal(await store.resolveApiKey('hash_aaa'), null);
 });
 
+test('user savings accrue cumulatively and floor at zero', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 's@x.com', passwordHash: 'h' });
+  assert.equal(await store.getUserSavings(u.id), 0);
+  assert.equal(await store.addUserSavings(u.id, 0.0123), 0.0123);
+  const total = await store.addUserSavings(u.id, 0.05);
+  assert.ok(Math.abs(total - 0.0623) < 1e-9, 'savings sum');
+  assert.equal(await store.getUserSavings(u.id), total);
+  // Unknown user → 0, no throw.
+  assert.equal(await store.getUserSavings('nope'), 0);
+})
+
 test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
   const store = new InMemoryStore();
   // First delivery claims it; a duplicate delivery is rejected (skip side effects).

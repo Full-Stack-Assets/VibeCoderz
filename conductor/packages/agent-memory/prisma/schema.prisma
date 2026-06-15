@@ -63,6 +63,7 @@ model User {
   role               String    @default("user") // 'user' | 'admin'
   stripeCustomerId   String?
   subscriptionStatus String? // Stripe subscription status, e.g. 'active'
+  savedUSD           Float     @default(0) // lifetime routing savings vs always-premium
   createdAt          DateTime  @default(now())
   sessions           Session[]
 }

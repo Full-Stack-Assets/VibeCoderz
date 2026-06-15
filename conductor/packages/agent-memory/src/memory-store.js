@@ -167,6 +167,20 @@ export class InMemoryStore {
     return u.topupUSD;
   }
 
+  // --- Lifetime routing savings (vs always-premium) — the value receipt ----
+
+  async getUserSavings(userId) {
+    const u = this.users.get(userId);
+    return u ? u.savedUSD || 0 : 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.savedUSD = Math.max(0, (u.savedUSD || 0) + (deltaUSD || 0));
+    return u.savedUSD;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
   // User-facing chat history, owned by an account and stored as an opaque
   // snapshot (the client's full conversation). Distinct from the runtime

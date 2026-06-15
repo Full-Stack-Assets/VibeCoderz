@@ -85,6 +85,7 @@ export function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
   const [credit, setCredit] = useState(0)
+  const [savedUSD, setSavedUSD] = useState(0)
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
@@ -115,6 +116,7 @@ export function Chat() {
   // Keep the live credit balance in sync with the account (updated again after
   // each turn via the stream's `done` event, and after returning from Stripe).
   useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
+  useEffect(() => setSavedUSD(user?.savedUSD ?? 0), [user?.savedUSD])
   // Re-deal the starter prompts when the rotation window rolls over, so even a
   // tab left open gets fresh suggestions (a minutely index check, no re-render
   // unless the window actually changed).
@@ -338,6 +340,7 @@ export function Chat() {
             }))
             setSpent(data.spentUSD as number)
             if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
+            if (typeof data.savedTotalUSD === 'number') setSavedUSD(data.savedTotalUSD as number)
             if (data.capReached) setCapReached(true)
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
@@ -594,6 +597,14 @@ export function Chat() {
               />
             )}
           </div>
+          {savedUSD >= 0.01 && (
+            <span
+              className="saved-badge"
+              title={`Routing has saved you about $${savedUSD.toFixed(2)} vs. always using the premium model.`}
+            >
+              saved ${savedUSD < 100 ? savedUSD.toFixed(2) : Math.round(savedUSD)}
+            </span>
+          )}
           <a
             className="bench-link"
             href="/benchmark"
