@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
+import { CodeIcon, SearchIcon, BarsIcon, EyeIcon } from './icons'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
 import { MemoryPanel } from './MemoryPanel'
@@ -80,6 +81,7 @@ export function Chat() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [panelTab, setPanelTab] = useState<'routing' | 'memory' | 'sandbox'>('routing')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
   const [credit, setCredit] = useState(0)
@@ -673,9 +675,25 @@ export function Chat() {
                 </span>
                 <h1>{greetingText()}</h1>
                 <p>
-                  A constraint-optimized general agent — code, web research, data analysis, and
-                  images. Every turn is routed to the most cost-effective model that can handle it,
-                  and you can see exactly why.
+                  A general agent that routes every message to the cheapest model that can
+                  actually handle it — and shows you which one, and why.
+                </p>
+                <div className="capabilities" aria-label="What Conductor can do">
+                  <span className="cap">
+                    <CodeIcon size={15} /> Code
+                  </span>
+                  <span className="cap">
+                    <SearchIcon size={15} /> Research
+                  </span>
+                  <span className="cap">
+                    <BarsIcon size={15} /> Data
+                  </span>
+                  <span className="cap">
+                    <EyeIcon size={15} /> Vision
+                  </span>
+                </div>
+                <p className="routing-hook">
+                  Typically 50–90% cheaper than pinning a premium model — <a href="/benchmark">see the receipts →</a>
                 </p>
                 <div className="suggestions">
                   {suggestions.map((s) => (
@@ -691,7 +709,10 @@ export function Chat() {
                   <Message
                     key={m.id}
                     msg={m}
-                    onInspect={() => setPanelOpen(true)}
+                    onInspect={() => {
+                      setPanelTab('routing')
+                      setPanelOpen(true)
+                    }}
                     onEdit={m.role === 'user' && !sending ? editResend : undefined}
                     onRegenerate={
                       m.role === 'assistant' && i === messages.length - 1 && !sending && !m.pending
@@ -779,6 +800,9 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              <div className="composer-hint">
+                <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+              </div>
               {capReached && billing.enabled && (
                 <div className="topup-bar" role="region" aria-label="Add routing credit">
                   <span className="topup-label">Out of budget — add credit to keep going:</span>
@@ -824,10 +848,25 @@ export function Chat() {
             </div>
           </div>
 
-          <aside className={`panel ${panelOpen ? 'show' : ''}`}>
-            <OrchestrationPanel decision={decision} audit={audit} />
-            <MemoryPanel />
-            <Sandbox />
+          <aside className={`panel ${panelOpen ? 'show' : ''}`} aria-label="Details panel">
+            <div className="panel-tabs" role="tablist" aria-label="Side panel">
+              {(['routing', 'memory', 'sandbox'] as const).map((t) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={panelTab === t}
+                  className={`panel-tab ${panelTab === t ? 'active' : ''}`}
+                  onClick={() => setPanelTab(t)}
+                >
+                  {t === 'routing' ? 'Routing' : t === 'memory' ? 'Memory' : 'Sandbox'}
+                </button>
+              ))}
+            </div>
+            <div className="panel-body" role="tabpanel" aria-label={`${panelTab} panel`}>
+              {panelTab === 'routing' && <OrchestrationPanel decision={decision} audit={audit} />}
+              {panelTab === 'memory' && <MemoryPanel />}
+              {panelTab === 'sandbox' && <Sandbox />}
+            </div>
           </aside>
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
         </div>

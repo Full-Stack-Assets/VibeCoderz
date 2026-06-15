@@ -78,8 +78,9 @@ export function MemoryPanel() {
       <h2>Memory</h2>
       <p className="sub">Saved preferences the assistant applies to every turn.</p>
       <div className="card">
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <div className="memory-add">
           <input
+            className="memory-input"
             value={draft}
             maxLength={500}
             placeholder="e.g. Prefer TypeScript and concise answers"
@@ -87,18 +88,8 @@ export function MemoryPanel() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') void add()
             }}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              padding: '6px 8px',
-              fontSize: 13,
-              color: 'inherit',
-              background: 'transparent',
-              border: '1px solid var(--clay, #e8e6dc)',
-              borderRadius: 6,
-            }}
           />
-          <button className="msg-action" disabled={!draft.trim() || busy} onClick={() => void add()}>
+          <button className="btn" disabled={!draft.trim() || busy} onClick={() => void add()}>
             Add
           </button>
         </div>
@@ -107,20 +98,11 @@ export function MemoryPanel() {
             No saved memories yet. Add facts or preferences and they&rsquo;ll inform every reply.
           </div>
         ) : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <ul className="memory-list">
             {memories.map((m) => (
-              <li
-                key={m.id}
-                style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, lineHeight: 1.4 }}
-              >
-                <span style={{ flex: 1, minWidth: 0 }}>{m.text}</span>
-                <button
-                  className="msg-action"
-                  title="Forget"
-                  aria-label="Forget"
-                  onClick={() => remove(m.id)}
-                  style={{ flex: '0 0 auto' }}
-                >
+              <li key={m.id} className="memory-item">
+                <span>{m.text}</span>
+                <button className="icon-btn" title="Forget" aria-label="Forget" onClick={() => remove(m.id)}>
                   ×
                 </button>
               </li>
