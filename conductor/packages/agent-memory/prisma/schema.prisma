@@ -87,6 +87,12 @@ model UserMemory {
   @@index([userId, createdAt])
 }
 
+// Webhook idempotency: ids of provider events already handled.
+model ProcessedEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
+}
+
 // API keys for the public API. Only the SHA-256 hash is stored.
 model ApiKey {
   id         String    @id @default(cuid())

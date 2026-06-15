@@ -105,6 +105,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
   last_used_at bigint
 );
 CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys (hash);
+CREATE TABLE IF NOT EXISTS processed_events (
+  id text PRIMARY KEY,
+  created_at bigint NOT NULL
+);
 `;
 
 const mapUser = (r) =>
@@ -209,6 +213,20 @@ export class PgStore {
       [conversationId]
     );
     return rows;
+  }
+
+  // --- Webhook idempotency -------------------------------------------------
+
+  async markEventProcessed(eventId) {
+    const { rowCount } = await this.q(
+      `INSERT INTO processed_events (id, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+      [eventId, Date.now()]
+    );
+    return rowCount > 0;
+  }
+
+  async releaseEvent(eventId) {
+    await this.q(`DELETE FROM processed_events WHERE id = $1`, [eventId]);
   }
 
   // --- API keys (public API auth) -----------------------------------------

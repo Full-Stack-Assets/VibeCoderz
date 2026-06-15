@@ -55,6 +55,21 @@ export class PrismaStore {
     });
   }
 
+  // --- Webhook idempotency -------------------------------------------------
+
+  async markEventProcessed(eventId) {
+    try {
+      await this.db.processedEvent.create({ data: { id: eventId } });
+      return true;
+    } catch {
+      return false; // unique-constraint violation → already processed
+    }
+  }
+
+  async releaseEvent(eventId) {
+    await this.db.processedEvent.deleteMany({ where: { id: eventId } });
+  }
+
   // --- API keys (public API auth) -----------------------------------------
 
   async createApiKey(userId, label, hash) {

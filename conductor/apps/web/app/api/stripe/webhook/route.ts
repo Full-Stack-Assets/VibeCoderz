@@ -4,6 +4,7 @@ import { verifyWebhook, planForPriceId } from '@/lib/server/stripe'
 export const runtime = 'nodejs'
 
 interface StripeEvent {
+  id: string
   type: string
   data: { object: Record<string, unknown> }
 }
@@ -23,8 +24,17 @@ export async function POST(req: Request) {
   } catch {
     return new Response('invalid payload', { status: 400 })
   }
+  if (!event.id) return new Response('missing event id', { status: 400 })
 
   const store = await authStore()
+
+  // Idempotency: claim the event id up front. A duplicate/replayed delivery
+  // (Stripe is at-least-once) is acknowledged without re-applying side effects —
+  // critical for one-time top-ups, which would otherwise grant credit twice.
+  if (!(await store.markEventProcessed(event.id))) {
+    return Response.json({ received: true, duplicate: true })
+  }
+
   const obj = event.data.object as Record<string, unknown>
   const meta = (obj.metadata as Record<string, string> | undefined) ?? {}
 
@@ -54,9 +64,17 @@ export async function POST(req: Request) {
       const userId = meta.userId
       if (userId) await store.updateUser(userId, { plan: 'free', subscriptionStatus: 'canceled' })
     }
-  } catch {
-    // Respond 200 even on a handler bug so Stripe doesn't enter retry storms;
-    // the event is logged on Stripe's side and can be resent.
+  } catch (err) {
+    // A transient failure (e.g. the DB write) must NOT be acknowledged — release
+    // the idempotency claim and return 5xx so Stripe retries and the paid grant
+    // isn't silently lost. The claim makes the retry safe from double-applying.
+    console.error('[stripe-webhook] handler failed:', err)
+    try {
+      await store.releaseEvent(event.id)
+    } catch {
+      /* best-effort release */
+    }
+    return new Response('handler error', { status: 500 })
   }
   return Response.json({ received: true })
 }
