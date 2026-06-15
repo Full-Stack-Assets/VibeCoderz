@@ -17,7 +17,7 @@ interface AuthValue {
   logout: () => Promise<void>
   refresh: () => Promise<User | null>
   /** Start Stripe Checkout for a paid plan; resolves to a redirect URL. */
-  startCheckout: (plan: PlanId) => Promise<string>
+  startCheckout: (plan: PlanId, cycle?: 'monthly' | 'annual') => Promise<string>
   /** Open the Stripe billing portal; resolves to a redirect URL. */
   openPortal: () => Promise<string>
   /** Buy a top-up credit pack; resolves to a Stripe Checkout redirect URL. */
@@ -97,8 +97,8 @@ export function AuthProviderComponent({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
-  const startCheckout = useCallback(async (plan: PlanId) => {
-    const res = await postJSON('/api/billing/checkout', { plan })
+  const startCheckout = useCallback(async (plan: PlanId, cycle: 'monthly' | 'annual' = 'monthly') => {
+    const res = await postJSON('/api/billing/checkout', { plan, cycle })
     if (!res.ok) throw new Error(await readError(res, 'Could not start checkout.'))
     return ((await res.json()) as { url: string }).url
   }, [])

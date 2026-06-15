@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const user = await currentUser(req)
   if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 })
 
-  let body: { plan?: string }
+  let body: { plan?: string; cycle?: string }
   try {
     body = await req.json()
   } catch {
@@ -17,9 +17,12 @@ export async function POST(req: Request) {
   }
   const plan = body.plan
   if (plan !== 'pro' && plan !== 'max') return Response.json({ error: 'Choose a paid plan.' }, { status: 400 })
+  const cycle = body.cycle === 'annual' ? 'annual' : 'monthly'
 
-  const priceId = priceIdForPlan(plan)
-  if (!priceId) return Response.json({ error: `No Stripe price configured for the ${plan} plan.` }, { status: 503 })
+  const priceId = priceIdForPlan(plan, cycle)
+  if (!priceId) {
+    return Response.json({ error: `No Stripe price configured for the ${plan} ${cycle} plan.` }, { status: 503 })
+  }
 
   const origin = new URL(req.url).origin
   try {

@@ -10,17 +10,19 @@ const STRIPE_API = 'https://api.stripe.com/v1'
 
 export const stripeConfigured = () => !!process.env.STRIPE_SECRET_KEY
 
-export function priceIdForPlan(plan: PlanId): string | undefined {
-  if (plan === 'pro') return process.env.STRIPE_PRICE_PRO
-  if (plan === 'max') return process.env.STRIPE_PRICE_MAX
+export type BillingCycle = 'monthly' | 'annual'
+
+export function priceIdForPlan(plan: PlanId, cycle: BillingCycle = 'monthly'): string | undefined {
+  if (plan === 'pro') return cycle === 'annual' ? process.env.STRIPE_PRICE_PRO_ANNUAL : process.env.STRIPE_PRICE_PRO
+  if (plan === 'max') return cycle === 'annual' ? process.env.STRIPE_PRICE_MAX_ANNUAL : process.env.STRIPE_PRICE_MAX
   return undefined
 }
 
-/** Reverse a Stripe price id back to a plan (for subscription webhooks). */
+/** Reverse a Stripe price id back to a plan (for subscription webhooks) — both cycles. */
 export function planForPriceId(priceId: string | undefined): PlanId | null {
   if (!priceId) return null
-  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
-  if (priceId === process.env.STRIPE_PRICE_MAX) return 'max'
+  if (priceId === process.env.STRIPE_PRICE_PRO || priceId === process.env.STRIPE_PRICE_PRO_ANNUAL) return 'pro'
+  if (priceId === process.env.STRIPE_PRICE_MAX || priceId === process.env.STRIPE_PRICE_MAX_ANNUAL) return 'max'
   return null
 }
 

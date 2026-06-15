@@ -20,7 +20,11 @@ export interface Plan {
   tagline: string
   features: string[]
   highlight?: boolean
+  /** Annual pricing (≈2 months free). Absent for Free. */
+  annual?: { price: string; perMonth: string }
 }
+
+export type BillingCycle = 'monthly' | 'annual'
 
 export const PLANS: Plan[] = [
   {
@@ -45,6 +49,7 @@ export const PLANS: Plan[] = [
       'Unlimited conversations',
     ],
     highlight: true,
+    annual: { price: '$200', perMonth: '$16.67' },
   },
   {
     id: 'max',
@@ -53,6 +58,7 @@ export const PLANS: Plan[] = [
     period: '/month',
     tagline: 'Highest usage limit and quality floor for heavy use.',
     features: ['Everything in Pro', 'Highest usage limit', 'Highest quality floor', 'Early access features'],
+    annual: { price: '$1,000', perMonth: '$83.33' },
   },
 ]
 

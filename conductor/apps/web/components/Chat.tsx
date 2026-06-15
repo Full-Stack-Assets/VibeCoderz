@@ -815,7 +815,7 @@ export function Chat() {
                 <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
               </div>
               {capReached && billing.enabled && (
-                <div className="topup-bar" role="region" aria-label="Add routing credit">
+                <div className="topup-bar" role="region" aria-label="Out of budget">
                   <span className="topup-label">Out of budget — add credit to keep going:</span>
                   <div className="topup-packs">
                     {TOPUP_PACKS.map((p) => (
@@ -832,6 +832,11 @@ export function Chat() {
                       </button>
                     ))}
                   </div>
+                  {user?.plan !== 'max' && (
+                    <button type="button" className="topup-upgrade" onClick={() => setPlanOpen(true)}>
+                      Upgrade for a bigger budget →
+                    </button>
+                  )}
                 </div>
               )}
               {budgetCap && (
