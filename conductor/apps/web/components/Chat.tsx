@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
+import { CodeIcon, SearchIcon, BarsIcon, EyeIcon } from './icons'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
 import { MemoryPanel } from './MemoryPanel'
@@ -674,9 +675,25 @@ export function Chat() {
                 </span>
                 <h1>{greetingText()}</h1>
                 <p>
-                  A constraint-optimized general agent — code, web research, data analysis, and
-                  images. Every turn is routed to the most cost-effective model that can handle it,
-                  and you can see exactly why.
+                  A general agent that routes every message to the cheapest model that can
+                  actually handle it — and shows you which one, and why.
+                </p>
+                <div className="capabilities" aria-label="What Conductor can do">
+                  <span className="cap">
+                    <CodeIcon size={15} /> Code
+                  </span>
+                  <span className="cap">
+                    <SearchIcon size={15} /> Research
+                  </span>
+                  <span className="cap">
+                    <BarsIcon size={15} /> Data
+                  </span>
+                  <span className="cap">
+                    <EyeIcon size={15} /> Vision
+                  </span>
+                </div>
+                <p className="routing-hook">
+                  Typically 50–90% cheaper than pinning a premium model — <a href="/benchmark">see the receipts →</a>
                 </p>
                 <div className="suggestions">
                   {suggestions.map((s) => (
@@ -831,7 +848,7 @@ export function Chat() {
             </div>
           </div>
 
-          <aside className={`panel ${panelOpen ? 'show' : ''}`}>
+          <aside className={`panel ${panelOpen ? 'show' : ''}`} aria-label="Details panel">
             <div className="panel-tabs" role="tablist" aria-label="Side panel">
               {(['routing', 'memory', 'sandbox'] as const).map((t) => (
                 <button
@@ -845,7 +862,7 @@ export function Chat() {
                 </button>
               ))}
             </div>
-            <div className="panel-body">
+            <div className="panel-body" role="tabpanel" aria-label={`${panelTab} panel`}>
               {panelTab === 'routing' && <OrchestrationPanel decision={decision} audit={audit} />}
               {panelTab === 'memory' && <MemoryPanel />}
               {panelTab === 'sandbox' && <Sandbox />}

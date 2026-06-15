@@ -15,6 +15,13 @@ import {
 } from './icons'
 import type { Msg } from '@/lib/types'
 
+/** A calm word for the routing fit score (avoids leading with a raw %). */
+function confidenceWord(score: number): string {
+  if (score >= 0.8) return 'strong'
+  if (score >= 0.65) return 'good'
+  return 'fair'
+}
+
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false)
   return (
@@ -319,14 +326,22 @@ export function Message({
           {whyOpen && (
             <div className="why">
               <p className="why-reason">{msg.decision.reason}</p>
-              <div className="why-stats">
-                {msg.decision.classification?.domain && (
-                  <span className="why-stat">{msg.decision.classification.domain}</span>
-                )}
-                <span className="why-stat">fit {(msg.decision.score * 100).toFixed(0)}%</span>
-                {msg.decision.fallback && <span className="why-stat">fallback</span>}
-                {msg.decision.overridden && <span className="why-stat">manual override</span>}
+              <div className="why-confidence" title={`Routing fit score ${Math.round(msg.decision.score * 100)}%`}>
+                <span className="why-conf-label">{confidenceWord(msg.decision.score)} match</span>
+                <span className="why-conf-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round(msg.decision.score * 100)}%` }} />
+                </span>
+                <span className="why-conf-pct">{Math.round(msg.decision.score * 100)}%</span>
               </div>
+              {(msg.decision.classification?.domain || msg.decision.fallback || msg.decision.overridden) && (
+                <div className="why-stats">
+                  {msg.decision.classification?.domain && (
+                    <span className="why-stat">{msg.decision.classification.domain}</span>
+                  )}
+                  {msg.decision.fallback && <span className="why-stat">fallback</span>}
+                  {msg.decision.overridden && <span className="why-stat">manual override</span>}
+                </div>
+              )}
               {onInspect && (
                 <button className="why-more" onClick={onInspect}>
                   Full breakdown →
