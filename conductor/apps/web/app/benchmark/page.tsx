@@ -1,9 +1,28 @@
 import Link from 'next/link'
 import { evaluate } from '@conductor/eval'
 
-export const metadata = {
-  title: 'Conductor — Routing Benchmark',
-  description: 'Measured cost/quality tradeoff of COO routing vs baseline strategies.',
+// Build the share card from the REAL benchmark numbers so the social preview
+// carries the actual receipt (and never drifts from the page). Deterministic.
+export async function generateMetadata() {
+  const title = 'Conductor — Routing Benchmark'
+  let description =
+    'Measured cost/quality tradeoff of COO routing vs baseline strategies — with receipts.'
+  try {
+    const v = ((await evaluate()) as Result).headline?.vsPremium
+    if (v) {
+      description =
+        `Measured: the COO router is ${v.costSavingsPct}% cheaper than always-premium ` +
+        `while keeping ${v.qualityRetentionPct}% of its quality. With receipts.`
+    }
+  } catch {
+    /* fall back to the generic description */
+  }
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
+  }
 }
 
 // Deterministic, pure compute — render at build time.
@@ -123,6 +142,27 @@ export default async function BenchmarkPage() {
               <div className="bench-card-s">at a fraction of the premium cost</div>
             </div>
           )}
+        </div>
+
+        {/* Conversion CTA — this page is the top of the funnel. */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0 8px' }}>
+          <Link
+            href="/"
+            style={{
+              display: 'inline-block',
+              padding: '10px 18px',
+              borderRadius: 8,
+              fontWeight: 600,
+              textDecoration: 'none',
+              color: 'var(--ivory, #faf9f5)',
+              background: 'var(--coral, #d97757)',
+            }}
+          >
+            Try Conductor free →
+          </Link>
+          <span className="bench-sub" style={{ margin: 0 }}>
+            Auto-routes every message to the cheapest capable model. No card required.
+          </span>
         </div>
 
         {/* Strategy comparison */}

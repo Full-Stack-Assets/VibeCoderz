@@ -67,11 +67,13 @@ export function Message({
   onInspect,
   onEdit,
   onRegenerate,
+  onFeedback,
 }: {
   msg: Msg
   onInspect?: () => void
   onEdit?: (id: string, content: string) => void
   onRegenerate?: () => void
+  onFeedback?: (signal: 'up' | 'down') => void
 }) {
   // Hook must run for every message (Rules of Hooks); the ref only binds below.
   const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
@@ -234,6 +236,14 @@ export function Message({
             {msg.decision.classification?.domain && (
               <span className="tag domain">{msg.decision.classification.domain}</span>
             )}
+            {msg.decision.classification?.sensitive && (
+              <span
+                className="tag routed"
+                title={`High-stakes (${msg.decision.classification.sensitive}) — held to a higher-capability model for safety.`}
+              >
+                🛡 {msg.decision.classification.sensitive}
+              </span>
+            )}
             <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
             <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
             {msg.escalation?.escalated && (
@@ -260,6 +270,28 @@ export function Message({
               <button className="msg-action" title="Regenerate reply" onClick={onRegenerate}>
                 Regenerate
               </button>
+            )}
+            {onFeedback && (
+              <span className="feedback" role="group" aria-label="Rate this answer">
+                <button
+                  className="msg-action"
+                  title="Good answer"
+                  aria-pressed={msg.feedback === 'up'}
+                  style={{ opacity: msg.feedback && msg.feedback !== 'up' ? 0.4 : 1 }}
+                  onClick={() => onFeedback('up')}
+                >
+                  👍
+                </button>
+                <button
+                  className="msg-action"
+                  title="Bad answer"
+                  aria-pressed={msg.feedback === 'down'}
+                  style={{ opacity: msg.feedback && msg.feedback !== 'down' ? 0.4 : 1 }}
+                  onClick={() => onFeedback('down')}
+                >
+                  👎
+                </button>
+              </span>
             )}
           </div>
         )}

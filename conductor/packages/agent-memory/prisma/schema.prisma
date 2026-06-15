@@ -76,3 +76,25 @@ model Session {
 
   @@index([userId])
 }
+
+// Durable per-user memory: long-lived preferences/facts injected into each turn.
+model UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// API keys for the public API. Only the SHA-256 hash is stored.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  label      String    @default("API key")
+  hash       String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}

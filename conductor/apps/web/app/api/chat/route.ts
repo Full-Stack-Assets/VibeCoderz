@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, estimateTurnCostUSD } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD, extractMemories, looksLikePreference } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -102,6 +102,8 @@ const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS)
 // is a 0..1 quality score; tune with CONDUCTOR_QUALITY_BAR.
 const ESCALATE_ENABLED = (process.env.CONDUCTOR_ESCALATE || 'on').toLowerCase() !== 'off'
 const QUALITY_BAR = Math.min(1, Math.max(0, Number(process.env.CONDUCTOR_QUALITY_BAR) || 0.6))
+// Auto-extract durable memories from preference-stating turns (off to disable).
+const MEMORY_EXTRACT_ENABLED = (process.env.CONDUCTOR_MEMORY_EXTRACT || 'on').toLowerCase() !== 'off'
 // Only verify/escalate models below this capability — re-checking an already
 // top-tier model just burns money. Mirrors the default in coo-engine/escalate.js.
 const ESCALATE_BELOW_CAPABILITY = 0.95
@@ -160,16 +162,16 @@ async function persist(
   userText: string,
   assistantText: string,
   meta: unknown
-): Promise<string | undefined> {
+): Promise<{ conversationId?: string; messageId?: string }> {
   try {
     const store = (await getStore()) as MemoryStore
     let id = conversationId
     if (!id) id = (await store.createConversation(userText.slice(0, 60))).id
     await store.addMessage(id, 'user', userText)
-    await store.addMessage(id, 'assistant', assistantText, meta)
-    return id
+    const asst = (await store.addMessage(id, 'assistant', assistantText, meta)) as { id?: string }
+    return { conversationId: id, messageId: asst?.id }
   } catch {
-    return conversationId
+    return { conversationId }
   }
 }
 
@@ -180,7 +182,8 @@ async function runAgenticOnce(
   modelId: string,
   messages: EngineMessage[],
   onStep: (step: ToolStep) => void,
-  maxTokens: number
+  maxTokens: number,
+  system: string
 ): Promise<{ text: string; steps: ToolStep[]; simulated: boolean; simReason: string | null }> {
   const executor = getExecutor()
   const registry = new ToolRegistry({ executor })
@@ -193,7 +196,7 @@ async function runAgenticOnce(
   const tools = registry.list()
   let simReason: string | null = null
   try {
-    const livePlanner = makeLiveToolPlanner({ modelId, system: SYSTEM, messages, tools, maxTokens })
+    const livePlanner = makeLiveToolPlanner({ modelId, system, messages, tools, maxTokens })
     if (livePlanner) {
       try {
         const out = (await runAgenticTurn({ planner: livePlanner as unknown as Planner, registry, onStep, maxSteps: MAX_AGENTIC_STEPS })) as {
@@ -230,7 +233,8 @@ async function runAgentic(
   onStep: (step: ToolStep) => void,
   maxTokens: number,
   userPrompt: string,
-  escalateCfg: { enabled: boolean; qualityBar: number }
+  escalateCfg: { enabled: boolean; qualityBar: number },
+  system: string
 ): Promise<{
   text: string
   steps: ToolStep[]
@@ -240,7 +244,7 @@ async function runAgentic(
   firstSteps: number
   secondSteps: number
 }> {
-  const first = await runAgenticOnce(modelId, messages, onStep, maxTokens)
+  const first = await runAgenticOnce(modelId, messages, onStep, maxTokens, system)
   const routed = getModel(modelId)
   const base = { ...first, firstSteps: first.steps.length, secondSteps: 0 }
 
@@ -251,7 +255,7 @@ async function runAgentic(
     return { ...base, escalation: { evaluated: false, escalated: false } }
   }
 
-  const { score } = await judgeAnswer({ prompt: userPrompt, answer: first.text, judgeModel: topModelId() })
+  const { score } = await judgeAnswer({ prompt: userPrompt, answer: first.text, judgeModel: defaultJudgeModelId() })
   const target = topModelId(modelId)
   if (score == null || score >= escalateCfg.qualityBar || !target) {
     return {
@@ -268,7 +272,7 @@ async function runAgentic(
   }
 
   // Escalate: re-run the loop with the strongest model.
-  const second = await runAgenticOnce(target, messages, onStep, maxTokens)
+  const second = await runAgenticOnce(target, messages, onStep, maxTokens, system)
   return {
     text: second.text,
     steps: [...first.steps, ...second.steps],
@@ -316,6 +320,24 @@ export async function POST(req: Request) {
 
   const engineMessages = buildEngineMessages(messages)
   const hasImages = hasImageAttachment(messages)
+
+  // Personalization: fold the user's durable memories into the system prompt so
+  // every turn is informed by their saved preferences. Best-effort — never block
+  // a turn on memory.
+  let systemPrompt = SYSTEM
+  try {
+    const memStore = (await getStore()) as { listMemories?: (id: string) => Promise<Array<{ text: string }>> }
+    const mems = (await memStore.listMemories?.(user.id)) ?? []
+    if (mems.length) {
+      const block = mems.slice(0, 50).map((m) => `- ${m.text}`).join('\n')
+      systemPrompt =
+        `${SYSTEM}\n\nWhat you know about this user (their saved preferences — ` +
+        `honor them unless the current request overrides):\n${block}`
+    }
+  } catch {
+    /* memory is best-effort */
+  }
+
   const enc = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -368,7 +390,8 @@ export async function POST(req: Request) {
             (step) => send('tool', { step }),
             MAX_OUTPUT_TOKENS,
             lastUser(messages),
-            { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR }
+            { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR },
+            systemPrompt
           )
           fullText = out.text
           steps = out.steps
@@ -386,7 +409,7 @@ export async function POST(req: Request) {
           escalation = enrichEscalation(out.escalation)
           if (escalation) send('escalation', { escalation })
         } else {
-          const opts = { system: SYSTEM, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
+          const opts = { system: systemPrompt, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
           const result = (await (ESCALATE_ENABLED
             ? completeWithEscalation(decision.model.id, opts, { qualityBar: QUALITY_BAR })
             : complete(decision.model.id, opts))) as {
@@ -422,7 +445,7 @@ export async function POST(req: Request) {
         const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
         const newSpent = await meter.addUserUsage(user.id, fromPlan)
         const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
-        const conversationId = await persist(body.conversationId, lastUser(messages), fullText, {
+        const persisted = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
           domain: decision.classification?.domain,
@@ -440,9 +463,36 @@ export async function POST(req: Request) {
           escalation,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
-          conversationId,
+          conversationId: persisted.conversationId,
+          // The stored assistant message id, so the client can attach feedback.
+          messageId: persisted.messageId,
           stepCount: steps.length,
         })
+
+        // Phase 4b: auto-extract durable memories from the user's message. Runs
+        // AFTER 'done' (so the answer is already delivered) and best-effort — a
+        // cheap, gated LLM call only on turns that look like a stated preference.
+        if (MEMORY_EXTRACT_ENABLED && !simulated) {
+          try {
+            const userText = lastUser(messages)
+            if (looksLikePreference(userText)) {
+              const memStore = (await getStore()) as {
+                listMemories?: (id: string) => Promise<Array<{ id: string; text: string; createdAt: number }>>
+                addMemory?: (id: string, text: string) => Promise<{ id: string; text: string; createdAt: number }>
+              }
+              const existing = (await memStore.listMemories?.(user.id)) ?? []
+              if (existing.length < 50) {
+                const facts = await extractMemories({ text: userText, existing: existing.map((m) => m.text) })
+                for (const f of facts.slice(0, 50 - existing.length)) {
+                  const saved = await memStore.addMemory?.(user.id, f)
+                  if (saved) send('memory', { memory: saved })
+                }
+              }
+            }
+          } catch {
+            /* memory extraction is best-effort */
+          }
+        }
         controller.close()
       } catch (err) {
         send('error', { error: (err as Error).message })

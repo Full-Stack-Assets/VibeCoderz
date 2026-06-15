@@ -37,6 +37,21 @@ export function topModelId(exceptId) {
 }
 
 /**
+ * The model that judges answers for verify-and-escalate. Defaults to a capable
+ * MID-TIER model (not the premium one): a strong judge is needed, but judging
+ * every sub-premium turn with the most expensive model would erode the very
+ * cost savings the router earns. Override with CONDUCTOR_JUDGE_MODEL; falls back
+ * to the strongest model only if the configured id isn't in the catalog.
+ */
+export function defaultJudgeModelId(env = process.env) {
+  const configured = env.CONDUCTOR_JUDGE_MODEL;
+  if (configured && getModel(configured)) return configured;
+  // Sonnet: cheaper than Opus, reachable wherever Opus is (a native Anthropic
+  // key or any gateway), and a reliable grader.
+  return getModel('anthropic/claude-sonnet-4.6') ? 'anthropic/claude-sonnet-4.6' : topModelId();
+}
+
+/**
  * Judge one answer against its prompt.
  * @returns {Promise<{score:number|null, costUSD:number, simulated:boolean}>}
  *   score is 0..1, or null when judging wasn't meaningful (simulated/unparseable).
@@ -97,7 +112,7 @@ export async function completeWithEscalation(modelId, opts = {}, cfg = {}) {
     return { ...first, escalation: { evaluated: false, escalated: false } };
   }
 
-  const judgeModel = judgeModelId || topModelId();
+  const judgeModel = judgeModelId || defaultJudgeModelId();
   const { score, costUSD: judgeCost } = await judgeAnswer({
     prompt: lastUserPrompt(opts.messages),
     answer: first.text,

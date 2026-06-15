@@ -63,6 +63,30 @@ function scoreType(text, patterns) {
 }
 
 /**
+ * SAFETY FLOORS — high-stakes domains where a wrong answer from a weak model
+ * causes real harm. A match raises a HARD capability floor so the turn can't be
+ * routed to a below-bar model (core's minQuality gate enforces it). Heuristic +
+ * deterministic like the rest of the classifier; a false positive only costs a
+ * slightly more capable (pricier) model, which is the safe direction to err.
+ */
+const SENSITIVE = [
+  { category: 'crisis', floor: 0.95, re: /\b(suicid|kill myself|want to die|self[\s-]?harm|hurt myself|overdose)\b/i },
+  { category: 'medical', floor: 0.92, re: /\b(diagnos|symptoms?|prescription|dosage|\bmg\b|medication|chemo|tumou?r|medical advice|treatment for)\b/i },
+  { category: 'legal', floor: 0.92, re: /\b(legal advice|lawsuit|liability|defamation|custody|tenant rights|am i liable|is it legal|sue\b)/i },
+  { category: 'financial', floor: 0.92, re: /\b(should i invest|invest in|which stock|stock pick|retirement plan|tax advice|mortgage|portfolio allocation)\b/i },
+];
+
+/** Detect a high-stakes turn; returns the highest-floor match, or null. */
+export function detectSensitive(text = '') {
+  const t = String(text);
+  let hit = null;
+  for (const s of SENSITIVE) {
+    if (s.re.test(t) && (!hit || s.floor > hit.floor)) hit = s;
+  }
+  return hit ? { category: hit.category, floor: hit.floor } : null;
+}
+
+/**
  * Classify a turn.
  * @param {string} text - the user message (or concatenated context)
  * @param {{qualityFloor?: number, hasImages?: boolean}} [opts]
@@ -96,9 +120,13 @@ export function classifyTurn(text = '', opts = {}) {
   if (requiresVision) complexity = Math.max(complexity, 0.5); // vision is never trivial
 
   // Quality floor: harder turns demand a more capable model. A caller-supplied
-  // qualityFloor sets a hard minimum (e.g. "always at least Sonnet").
+  // qualityFloor sets a hard minimum (e.g. "always at least Sonnet"). A
+  // high-stakes turn raises a SAFETY floor that can only push the bar up, never
+  // down — so sensitive asks never route to a below-bar model.
   const derived = 0.55 + complexity * 0.4; // 0.67 .. 0.95
-  const minQuality = Math.min(0.98, Math.max(opts.qualityFloor ?? 0, derived));
+  const sensitive = detectSensitive(t);
+  const safetyFloor = sensitive ? sensitive.floor : 0;
+  const minQuality = Math.min(0.98, Math.max(opts.qualityFloor ?? 0, derived, safetyFloor));
 
   return {
     type,
@@ -106,6 +134,8 @@ export function classifyTurn(text = '', opts = {}) {
     complexity: Number(complexity.toFixed(2)),
     minQuality: Number(minQuality.toFixed(2)),
     requiresVision,
+    sensitive: sensitive ? sensitive.category : null,
+    safetyFloor,
     signals: counts,
   };
 }

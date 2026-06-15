@@ -55,6 +55,60 @@ export class PrismaStore {
     });
   }
 
+  // --- API keys (public API auth) -----------------------------------------
+
+  async createApiKey(userId, label, hash) {
+    const r = await this.db.apiKey.create({ data: { userId, label: label || 'API key', hash } });
+    return { id: r.id, label: r.label, createdAt: r.createdAt };
+  }
+
+  async resolveApiKey(hash) {
+    const r = await this.db.apiKey.findUnique({ where: { hash } });
+    if (!r) return null;
+    await this.db.apiKey.update({ where: { id: r.id }, data: { lastUsedAt: new Date() } });
+    return { id: r.id, userId: r.userId };
+  }
+
+  async listApiKeys(userId) {
+    return this.db.apiKey.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, label: true, createdAt: true, lastUsedAt: true },
+    });
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const r = await this.db.apiKey.deleteMany({ where: { id: keyId, userId } });
+    return r.count > 0;
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+
+  async addMemory(userId, text) {
+    return this.db.userMemory.create({ data: { userId, text: String(text) } });
+  }
+
+  async listMemories(userId) {
+    return this.db.userMemory.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const r = await this.db.userMemory.deleteMany({ where: { id: memoryId, userId } });
+    return r.count > 0;
+  }
+
+  // Merge a quality-feedback signal into a message's meta (read-merge-write,
+  // since Prisma has no deep-merge for a Json column).
+  async recordFeedback(conversationId, messageId, signal) {
+    const m = await this.db.message.findFirst({ where: { id: messageId, conversationId } });
+    if (!m) return false;
+    await this.db.message.update({
+      where: { id: messageId },
+      data: { meta: { ...(m.meta || {}), feedback: { signal, at: Date.now() } } },
+    });
+    return true;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
 
   async upsertConversation({ id, ownerId, title, updatedAt, snapshot }) {

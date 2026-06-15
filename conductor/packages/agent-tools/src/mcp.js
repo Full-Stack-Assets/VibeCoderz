@@ -19,6 +19,17 @@
 const PROTOCOL_VERSION = '2025-06-18';
 const sanitize = (s) => String(s || '').replace(/[^a-zA-Z0-9_-]/g, '_');
 
+// Provider tool-name limit is 64 chars. Keep long `<server>__<tool>` names under
+// it, staying unique via a short deterministic hash suffix. Only the registry
+// key / schema name is capped — the handler still calls the original tool name.
+function capName(name) {
+  if (name.length <= 64) return name;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (Math.imul(h, 31) + name.charCodeAt(i)) | 0;
+  const suffix = `_${(h >>> 0).toString(36)}`;
+  return name.slice(0, 64 - suffix.length) + suffix;
+}
+
 /** Parse configured MCP servers from the environment. Returns [] when unset. */
 export function parseMcpConfig(env = process.env) {
   const raw = (env.CONDUCTOR_MCP || '').trim();
@@ -158,7 +169,7 @@ export async function registerMcpTools(registry, env = process.env, { fetchImpl 
       const tools = await client.listTools();
       for (const t of tools) {
         if (!t?.name) continue;
-        const localName = `${cfg.name}__${sanitize(t.name)}`;
+        const localName = capName(`${cfg.name}__${sanitize(t.name)}`);
         registry.register(
           {
             name: localName,

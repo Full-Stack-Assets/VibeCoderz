@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Message } from './Message'
 import { OrchestrationPanel } from './OrchestrationPanel'
+import { MemoryPanel } from './MemoryPanel'
 import { Sandbox } from './Sandbox'
 import { Sidebar } from './Sidebar'
 import {
@@ -215,6 +216,18 @@ export function Chat() {
   const patch = (id: string, fn: (m: Msg) => Msg) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)))
 
+  // Record a per-turn quality label. Optimistic; best-effort POST to the server,
+  // which merges it into the stored message's meta (the feedback flywheel input).
+  const sendFeedback = (msg: Msg, signal: 'up' | 'down') => {
+    if (!msg.storeId || !currentId) return
+    patch(msg.id, (m) => ({ ...m, feedback: signal }))
+    void fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conversationId: currentId, messageId: msg.storeId, signal }),
+    }).catch(() => {})
+  }
+
   // Read selected files into attachments: images → data URL, text/data → text.
   const onFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return
@@ -308,6 +321,9 @@ export function Chat() {
             patch(pendingId, (m) => ({ ...m, pending: false, steps: [...(m.steps || []), step] }))
           } else if (event === 'escalation') {
             patch(pendingId, (m) => ({ ...m, escalation: data.escalation as Msg['escalation'] }))
+          } else if (event === 'memory') {
+            // A memory was auto-extracted server-side; nudge the panel to reload.
+            if (typeof window !== 'undefined') window.dispatchEvent(new Event('conductor:memory-changed'))
           } else if (event === 'text') {
             patch(pendingId, (m) => ({ ...m, pending: false, content: m.content + String(data.delta ?? '') }))
           } else if (event === 'done') {
@@ -316,6 +332,7 @@ export function Chat() {
               pending: false,
               simulated: data.simulated as boolean,
               costUSD: data.costUSD as number,
+              storeId: (data.messageId as string) || m.storeId,
             }))
             setSpent(data.spentUSD as number)
             if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
@@ -681,6 +698,11 @@ export function Chat() {
                         ? regenerate
                         : undefined
                     }
+                    onFeedback={
+                      m.role === 'assistant' && m.storeId && !m.pending
+                        ? (signal) => sendFeedback(m, signal)
+                        : undefined
+                    }
                   />
                 ))}
                 <div ref={bottomRef} />
@@ -804,6 +826,7 @@ export function Chat() {
 
           <aside className={`panel ${panelOpen ? 'show' : ''}`}>
             <OrchestrationPanel decision={decision} audit={audit} />
+            <MemoryPanel />
             <Sandbox />
           </aside>
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
