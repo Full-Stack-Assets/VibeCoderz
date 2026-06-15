@@ -4,14 +4,24 @@ import { useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Citations, DataChart } from './ToolResult'
 import { renderMarkdown } from '@/lib/markdown'
+import {
+  ThumbUpIcon,
+  ThumbDownIcon,
+  ShieldIcon,
+  EscalateIcon,
+  RefreshIcon,
+  CopyIcon,
+  CheckIcon,
+} from './icons'
 import type { Msg } from '@/lib/types'
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false)
   return (
     <button
-      className="copy-btn"
-      title="Copy"
+      className={`icon-btn${done ? ' on' : ''}`}
+      title={done ? 'Copied' : 'Copy reply'}
+      aria-label="Copy reply"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text)
@@ -22,7 +32,7 @@ function CopyButton({ text }: { text: string }) {
         }
       }}
     >
-      {done ? 'Copied' : 'Copy'}
+      {done ? <CheckIcon /> : <CopyIcon />}
     </button>
   )
 }
@@ -225,74 +235,79 @@ export function Message({
         )}
         {msg.decision?.model && !msg.pending && (
           <div className="msg-meta">
+            {/* Primary: the routed model (click → full "why" in the panel) + cost.
+                One emphasized element; the rationale lives behind it. */}
             <span
-              className="tag routed"
-              title={msg.decision.reason}
+              className="tag model"
+              title={`${msg.decision.reason} — click for the full routing breakdown`}
+              role="button"
+              tabIndex={0}
               onClick={onInspect}
-              style={{ cursor: 'pointer' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onInspect?.()
+                }
+              }}
             >
               <Burst size={11} /> {msg.decision.model.label}
             </span>
-            {msg.decision.classification?.domain && (
-              <span className="tag domain">{msg.decision.classification.domain}</span>
+            <span className="tag cost">${(msg.costUSD ?? 0).toFixed(4)}</span>
+
+            {/* Only noteworthy routing events surface inline. */}
+            {msg.escalation?.escalated && (
+              <span
+                className="tag status accent"
+                title={`Scored ${Math.round((msg.escalation.firstScore ?? 0) * 100)}/100 — below the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} bar — so the turn was escalated from ${msg.escalation.firstLabel} to ${msg.escalation.finalLabel}.`}
+              >
+                <EscalateIcon size={12} /> escalated
+              </span>
             )}
             {msg.decision.classification?.sensitive && (
               <span
-                className="tag routed"
+                className="tag status"
                 title={`High-stakes (${msg.decision.classification.sensitive}) — held to a higher-capability model for safety.`}
               >
-                🛡 {msg.decision.classification.sensitive}
+                <ShieldIcon size={12} /> {msg.decision.classification.sensitive}
               </span>
             )}
-            <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
-            <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
-            {msg.escalation?.escalated && (
-              <span
-                className="tag routed"
-                title={`The first model scored ${Math.round((msg.escalation.firstScore ?? 0) * 100)}/100 — below the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} quality bar — so the turn was escalated to a stronger model.`}
-              >
-                ↑ {msg.escalation.firstLabel ?? 'cheap'} → {msg.escalation.finalLabel ?? 'premium'}
+            {msg.simulated && (
+              <span className="tag sim" title="No live model configured — simulated response.">
+                simulated
               </span>
             )}
-            {msg.escalation && msg.escalation.evaluated && !msg.escalation.escalated && (
-              <span
-                className="tag"
-                title={`Quality-checked: the routed model scored ${Math.round((msg.escalation.score ?? 0) * 100)}/100, at or above the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} bar — no escalation needed.`}
-              >
-                ✓ quality-checked
-              </span>
-            )}
-            {msg.simulated && <span className="tag sim">simulated</span>}
-            {msg.decision.fallback && <span className="tag">fallback</span>}
-            {msg.decision.overridden && <span className="tag">override</span>}
-            {msg.content && <CopyButton text={msg.content} />}
-            {onRegenerate && (
-              <button className="msg-action" title="Regenerate reply" onClick={onRegenerate}>
-                Regenerate
-              </button>
-            )}
-            {onFeedback && (
-              <span className="feedback" role="group" aria-label="Rate this answer">
-                <button
-                  className="msg-action"
-                  title="Good answer"
-                  aria-pressed={msg.feedback === 'up'}
-                  style={{ opacity: msg.feedback && msg.feedback !== 'up' ? 0.4 : 1 }}
-                  onClick={() => onFeedback('up')}
-                >
-                  👍
+
+            {/* Secondary actions reveal on hover (still keyboard-reachable). */}
+            <span className="msg-tools">
+              {onFeedback && (
+                <>
+                  <button
+                    className={`icon-btn${msg.feedback === 'up' ? ' on' : ''}`}
+                    title="Good answer"
+                    aria-label="Good answer"
+                    aria-pressed={msg.feedback === 'up'}
+                    onClick={() => onFeedback('up')}
+                  >
+                    <ThumbUpIcon />
+                  </button>
+                  <button
+                    className={`icon-btn danger${msg.feedback === 'down' ? ' on' : ''}`}
+                    title="Bad answer"
+                    aria-label="Bad answer"
+                    aria-pressed={msg.feedback === 'down'}
+                    onClick={() => onFeedback('down')}
+                  >
+                    <ThumbDownIcon />
+                  </button>
+                </>
+              )}
+              {msg.content && <CopyButton text={msg.content} />}
+              {onRegenerate && (
+                <button className="icon-btn" title="Regenerate reply" aria-label="Regenerate reply" onClick={onRegenerate}>
+                  <RefreshIcon />
                 </button>
-                <button
-                  className="msg-action"
-                  title="Bad answer"
-                  aria-pressed={msg.feedback === 'down'}
-                  style={{ opacity: msg.feedback && msg.feedback !== 'down' ? 0.4 : 1 }}
-                  onClick={() => onFeedback('down')}
-                >
-                  👎
-                </button>
-              </span>
-            )}
+              )}
+            </span>
           </div>
         )}
       </div>

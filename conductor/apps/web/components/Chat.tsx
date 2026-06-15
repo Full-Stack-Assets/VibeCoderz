@@ -779,6 +779,9 @@ export function Chat() {
                   </button>
                 )}
               </div>
+              <div className="composer-hint">
+                <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+              </div>
               {capReached && billing.enabled && (
                 <div className="topup-bar" role="region" aria-label="Add routing credit">
                   <span className="topup-label">Out of budget — add credit to keep going:</span>

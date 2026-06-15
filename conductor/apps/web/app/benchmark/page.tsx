@@ -145,22 +145,11 @@ export default async function BenchmarkPage() {
         </div>
 
         {/* Conversion CTA — this page is the top of the funnel. */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0 8px' }}>
-          <Link
-            href="/"
-            style={{
-              display: 'inline-block',
-              padding: '10px 18px',
-              borderRadius: 8,
-              fontWeight: 600,
-              textDecoration: 'none',
-              color: 'var(--ivory, #faf9f5)',
-              background: 'var(--coral, #d97757)',
-            }}
-          >
+        <div className="bench-cta">
+          <Link href="/" className="btn btn-primary">
             Try Conductor free →
           </Link>
-          <span className="bench-sub" style={{ margin: 0 }}>
+          <span className="bench-sub">
             Auto-routes every message to the cheapest capable model. No card required.
           </span>
         </div>
