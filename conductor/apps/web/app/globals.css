@@ -1216,6 +1216,11 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .bench-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bench-table .mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }
 .bench-table tr.hl td { background: var(--coral-tint); font-weight: 600; }
+.bench-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  background: var(--surface-sunk); border: 1px solid var(--border); vertical-align: middle;
+}
 
 .bench-note { margin-top: 36px; border-left: 3px solid var(--line-strong); padding: 4px 0 4px 18px; }
 .bench-note h3 { font-size: 15px; margin: 0 0 10px; }

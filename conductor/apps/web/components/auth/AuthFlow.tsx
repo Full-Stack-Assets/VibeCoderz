@@ -77,8 +77,8 @@ export function AuthFlow({
           <div className="auth-block">
             {intro}
             <p className="auth-lede">
-              Every message is routed to the cheapest model that can do the job — strong answers
-              without overpaying.
+              Conductor routes every message to the cheapest model that can actually handle it —
+              the same answers for a fraction of the price, with a receipt to prove it.
             </p>
             <button className="auth-primary" onClick={() => go('signup')}>
               Create account

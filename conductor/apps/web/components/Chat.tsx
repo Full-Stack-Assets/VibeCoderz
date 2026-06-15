@@ -107,6 +107,8 @@ export function Chat({ onNewUser }: { onNewUser?: () => void } = {}) {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup')
   const [trialWall, setTrialWall] = useState(false)
+  // Real headline numbers from the routing benchmark, for the landing wedge.
+  const [headline, setHeadline] = useState<{ costSavingsPct: number; qualityRetentionPct: number } | null>(null)
   const trialRemainingRef = useRef<number | null>(null)
   trialRemainingRef.current = trialRemaining
 
@@ -161,6 +163,21 @@ export function Chat({ onNewUser }: { onNewUser?: () => void } = {}) {
     fetch('/api/models')
       .then((r) => r.json())
       .then((d) => alive && setModels(d.models ?? []))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+  // Pull the measured routing headline (X% cheaper at Y% of premium quality) so
+  // the greeting leads with a real number, not a hand-wavy range.
+  useEffect(() => {
+    let alive = true
+    fetch('/api/benchmark')
+      .then((r) => r.json())
+      .then((d) => {
+        const v = d?.headline?.vsPremium
+        if (alive && v && typeof v.costSavingsPct === 'number') setHeadline(v)
+      })
       .catch(() => {})
     return () => {
       alive = false
@@ -767,8 +784,19 @@ export function Chat({ onNewUser }: { onNewUser?: () => void } = {}) {
                 </span>
                 <h1>{greetingText()}</h1>
                 <p>
-                  A general agent that routes every message to the cheapest model that can
-                  actually handle it — and shows you which one, and why.
+                  {headline ? (
+                    <>
+                      Same answers, <strong>{headline.costSavingsPct}% cheaper</strong>. Conductor
+                      routes every message to the cheapest model that can actually handle it —
+                      keeping {headline.qualityRetentionPct}% of premium quality — and shows you
+                      which model, and why.
+                    </>
+                  ) : (
+                    <>
+                      A general agent that routes every message to the cheapest model that can
+                      actually handle it — and shows you which one, and why.
+                    </>
+                  )}
                 </p>
                 <div className="capabilities" aria-label="What Conductor can do">
                   <span className="cap">
@@ -785,7 +813,7 @@ export function Chat({ onNewUser }: { onNewUser?: () => void } = {}) {
                   </span>
                 </div>
                 <p className="routing-hook">
-                  Typically 50–90% cheaper than pinning a premium model — <a href="/benchmark">see the receipts →</a>
+                  Measured on a public benchmark, not asserted — <a href="/benchmark">see the receipt →</a>
                 </p>
                 <div className="suggestions">
                   {suggestions.map((s) => (

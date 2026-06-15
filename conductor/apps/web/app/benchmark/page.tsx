@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { evaluate } from '@conductor/eval'
+import { evaluate, evaluateModels } from '@conductor/eval'
 
 // Build the share card from the REAL benchmark numbers so the social preview
 // carries the actual receipt (and never drifts from the page). Deterministic.
@@ -63,6 +63,31 @@ interface Result {
   }
   byDomain: DomainRow[]
 }
+interface ModelRow {
+  id: string
+  label: string
+  provider: string
+  capability: number
+  multimodal: boolean
+  avgQuality: number
+  costPerTask: number
+  qualityPerDollar: number
+}
+interface BestPick {
+  id: string
+  label: string
+}
+interface DomainBest {
+  domain: string
+  tasks: number
+  bestQuality: (BestPick & { quality: number }) | null
+  bestValue: (BestPick & { value: number; costPerTask: number }) | null
+}
+interface Leaderboard {
+  n: number
+  models: ModelRow[]
+  bestByDomain: DomainBest[]
+}
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const usd = (n: number) => `$${n.toFixed(5)}`
@@ -71,10 +96,16 @@ export default async function BenchmarkPage() {
   // Rendered at build time; guard so an eval error degrades gracefully rather
   // than aborting `next build` (which would block the whole deploy).
   let result: Result | null = null
+  let board: Leaderboard | null = null
   try {
     result = (await evaluate()) as Result
   } catch (err) {
     console.error('[benchmark] evaluate() failed:', err)
+  }
+  try {
+    board = (await evaluateModels()) as Leaderboard
+  } catch (err) {
+    console.error('[benchmark] evaluateModels() failed:', err)
   }
   if (!result) {
     return (
@@ -180,6 +211,83 @@ export default async function BenchmarkPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Per-MODEL leaderboard — the "which model should I actually use" view. */}
+        {board && board.models.length > 0 && (
+          <>
+            <h2>Model leaderboard — most quality per dollar</h2>
+            <p className="bench-sub">
+              Every model in the catalog pinned for all {board.n} tasks, ranked by quality per
+              dollar (the same oracle and token pricing as above). The cheapest model is the best
+              <em> value</em> for most work; the premium models earn their price only on the
+              hardest tasks — which is exactly what the router exploits.
+            </p>
+            <div className="bench-tablewrap">
+              <table className="bench-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Model</th>
+                    <th className="num">Avg quality</th>
+                    <th className="num">$ / task</th>
+                    <th className="num">Quality / $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {board.models.map((m, i) => (
+                    <tr key={m.id}>
+                      <td className="num">{i + 1}</td>
+                      <td>
+                        {m.label} {m.multimodal ? '' : <span className="bench-tag">text-only</span>}
+                      </td>
+                      <td className="num">{pct(m.avgQuality)}</td>
+                      <td className="num">{usd(m.costPerTask)}</td>
+                      <td className="num">
+                        {Number.isFinite(m.qualityPerDollar) ? m.qualityPerDollar.toLocaleString('en-US') : '∞'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* Best model per task type — the shareable "cheapest model for X" answer. */}
+        {board && board.bestByDomain.length > 0 && (
+          <>
+            <h2>Best model per task type</h2>
+            <p className="bench-sub">
+              The highest-quality pick and the best-value pick for each kind of work. The router
+              aims at the value column by default and reaches for the quality column only when a
+              turn needs it.
+            </p>
+            <div className="bench-tablewrap">
+              <table className="bench-table">
+                <thead>
+                  <tr>
+                    <th>Task type</th>
+                    <th className="num">Tasks</th>
+                    <th>Highest quality</th>
+                    <th>Best value (quality / $)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {board.bestByDomain.map((d) => (
+                    <tr key={d.domain}>
+                      <td style={{ textTransform: 'capitalize' }}>{d.domain}</td>
+                      <td className="num">{d.tasks}</td>
+                      <td>
+                        {d.bestQuality ? `${d.bestQuality.label} (${pct(d.bestQuality.quality)})` : '—'}
+                      </td>
+                      <td>{d.bestValue ? `${d.bestValue.label} (${usd(d.bestValue.costPerTask)}/task)` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* Per-domain breakdown */}
         {result.byDomain.length > 0 && (
