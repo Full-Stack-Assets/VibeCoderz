@@ -28,6 +28,7 @@ import {
 } from '@/lib/historyServer'
 import type { Attachment, Msg, RouteDecision, ToolStep } from '@/lib/types'
 import { useAuth } from './auth/AuthContext'
+import { AuthFlow } from './auth/AuthFlow'
 import { Pricing } from './auth/Pricing'
 import { RoutingControls, type CatalogModel } from './RoutingControls'
 import { ShortcutsHelp } from './ShortcutsHelp'
@@ -63,7 +64,7 @@ interface AuditItem {
   reason: string
 }
 
-export function Chat() {
+export function Chat({ onNewUser }: { onNewUser?: () => void } = {}) {
   const { user, logout, startTopup, billing } = useAuth()
   // Scope conversation history to this account before any read/write below.
   setHistoryNamespace(user?.id ?? null)
@@ -99,6 +100,15 @@ export function Chat() {
   const [capReached, setCapReached] = useState(false)
   const [toppingUp, setToppingUp] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<string[]>(() => rotatingSuggestions())
+  // Anonymous trial: signed-out visitors get a few real turns before the wall.
+  // `trialRemaining` is null until the server reports it (or for signed-in users).
+  const [trialRemaining, setTrialRemaining] = useState<number | null>(null)
+  const [anonSaved, setAnonSaved] = useState(0)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup')
+  const [trialWall, setTrialWall] = useState(false)
+  const trialRemainingRef = useRef<number | null>(null)
+  trialRemainingRef.current = trialRemaining
 
   const convRef = useRef<HTMLDivElement>(null)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -119,6 +129,19 @@ export function Chat() {
   // each turn via the stream's `done` event, and after returning from Stripe).
   useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
   useEffect(() => setSavedUSD(user?.savedUSD ?? 0), [user?.savedUSD])
+  // Once signed in, tear down all trial UI (counter, wall, auth modal).
+  useEffect(() => {
+    if (user) {
+      setTrialRemaining(null)
+      setTrialWall(false)
+      setAuthOpen(false)
+    }
+  }, [user])
+
+  const openAuth = useCallback((mode: 'signin' | 'signup') => {
+    setAuthMode(mode)
+    setAuthOpen(true)
+  }, [])
   // Re-deal the starter prompts when the rotation window rolls over, so even a
   // tab left open gets fresh suggestions (a minutely index check, no re-render
   // unless the window actually changed).
@@ -297,6 +320,17 @@ export function Chat() {
             qualityFloor: qualityFloor || undefined,
           }),
         })
+        // Anonymous trial spent → server returns 402; show the signup wall and
+        // drop the optimistic pending bubble rather than rendering an error.
+        if (res.status === 402) {
+          const data = (await res.json().catch(() => ({}))) as { trialExhausted?: boolean }
+          if (data.trialExhausted) {
+            setMessages(history)
+            setTrialRemaining(0)
+            setTrialWall(true)
+            return
+          }
+        }
         if (!res.body) throw new Error('no response stream')
 
         const reader = res.body.getReader()
@@ -344,6 +378,11 @@ export function Chat() {
             if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
             if (typeof data.savedTotalUSD === 'number') setSavedUSD(data.savedTotalUSD as number)
             if (data.capReached) setCapReached(true)
+            // Anonymous trial: track turns left + accumulate the savings receipt.
+            if (data.anon) {
+              if (typeof data.trialRemaining === 'number') setTrialRemaining(data.trialRemaining)
+              if (typeof data.savedUSD === 'number') setAnonSaved((s) => s + (data.savedUSD as number))
+            }
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
           }
@@ -393,6 +432,12 @@ export function Chat() {
       const content = text.trim()
       const atts = attachments
       if ((!content && atts.length === 0) || sending) return
+      // Out of free trial turns (signed-out) → show the wall instead of a doomed
+      // request. The server enforces this too (402); this just saves a round-trip.
+      if (!user && trialRemainingRef.current !== null && trialRemainingRef.current <= 0) {
+        setTrialWall(true)
+        return
+      }
       const userMsg: Msg = { id: mkId(), role: 'user', content, attachments: atts.length ? atts : undefined }
       const history = [...messagesRef.current, userMsg]
       setInput('')
@@ -400,7 +445,7 @@ export function Chat() {
       requestAnimationFrame(autosize)
       await runTurn(history)
     },
-    [attachments, sending, runTurn]
+    [attachments, sending, runTurn, user]
   )
 
   // Buy a top-up credit pack — redirect to Stripe Checkout.
@@ -599,12 +644,17 @@ export function Chat() {
               />
             )}
           </div>
-          {savedUSD >= 0.01 && (
+          {!user && trialRemaining !== null && (
+            <span className="trial-pill" title="Free trial — create an account for your own budget, history, and more.">
+              {trialRemaining > 0 ? `${trialRemaining} free message${trialRemaining === 1 ? '' : 's'} left` : 'Free trial used'}
+            </span>
+          )}
+          {(user ? savedUSD : anonSaved) >= 0.01 && (
             <span
               className="saved-badge"
-              title={`Routing has saved you about $${savedUSD.toFixed(2)} vs. always using the premium model.`}
+              title={`Routing has saved about $${(user ? savedUSD : anonSaved).toFixed(2)} vs. always using the premium model.`}
             >
-              saved ${savedUSD < 100 ? savedUSD.toFixed(2) : Math.round(savedUSD)}
+              saved ${(user ? savedUSD : anonSaved) < 100 ? (user ? savedUSD : anonSaved).toFixed(2) : Math.round(user ? savedUSD : anonSaved)}
             </span>
           )}
           <a
@@ -633,15 +683,26 @@ export function Chat() {
             <SlidersIcon />
           </button>
           <div className="account">
-            <button
-              className="avatar-btn"
-              onClick={() => setAccountOpen((o) => !o)}
-              title={user?.email}
-              aria-label="Account"
-            >
-              {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
-            </button>
-            {accountOpen && (
+            {!user ? (
+              <div className="auth-actions">
+                <button className="auth-signin-link" onClick={() => openAuth('signin')}>
+                  Sign in
+                </button>
+                <button className="auth-cta" onClick={() => openAuth('signup')}>
+                  Create free account
+                </button>
+              </div>
+            ) : (
+              <button
+                className="avatar-btn"
+                onClick={() => setAccountOpen((o) => !o)}
+                title={user?.email}
+                aria-label="Account"
+              >
+                {(user?.name || user?.email || '?').trim().charAt(0).toUpperCase()}
+              </button>
+            )}
+            {user && accountOpen && (
               <>
                 <div className="account-scrim" onClick={() => setAccountOpen(false)} />
                 <div className="account-menu" ref={accountMenuRef} role="dialog" aria-modal="true" aria-label="Account" tabIndex={-1}>
@@ -835,6 +896,14 @@ export function Chat() {
               <div className="composer-hint">
                 <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
               </div>
+              {!user && trialRemaining !== null && trialRemaining <= 0 && (
+                <div className="trial-bar" role="region" aria-label="Free trial used">
+                  <span className="trial-bar-label">You’ve used your free messages.</span>
+                  <button type="button" className="trial-bar-cta" onClick={() => setTrialWall(true)}>
+                    Create a free account to keep going →
+                  </button>
+                </div>
+              )}
               {capReached && billing.enabled && (
                 <div className="topup-bar" role="region" aria-label="Out of budget">
                   <span className="topup-label">Out of budget — add credit to keep going:</span>
@@ -911,6 +980,40 @@ export function Chat() {
 
       {planOpen && <Pricing mode="manage" onClose={() => setPlanOpen(false)} />}
       {shortcutsOpen && <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />}
+
+      {(authOpen || trialWall) && (
+        <AuthFlow
+          initialMode={trialWall ? 'signup' : authMode}
+          onClose={() => {
+            setAuthOpen(false)
+            setTrialWall(false)
+          }}
+          intro={
+            trialWall ? (
+              <div className="trial-receipt">
+                <div className="trial-receipt-title">That’s your free trial</div>
+                <p className="trial-receipt-body">
+                  Conductor routed every message to the cheapest model that could handle it
+                  {anonSaved >= 0.01 ? (
+                    <>
+                      {' '}
+                      — saving about <strong>${anonSaved.toFixed(2)}</strong> vs. always using a premium model
+                    </>
+                  ) : (
+                    ' — keeping each one cheap'
+                  )}
+                  . Create a free account to keep chatting, save your conversations, and track your savings.
+                </p>
+              </div>
+            ) : undefined
+          }
+          onAuthenticated={(isNewUser) => {
+            setAuthOpen(false)
+            setTrialWall(false)
+            if (isNewUser) onNewUser?.()
+          }}
+        />
+      )}
     </div>
   )
 }

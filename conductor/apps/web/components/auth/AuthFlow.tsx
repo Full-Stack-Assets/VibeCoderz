@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Burst } from '../Burst'
 import { isValidEmail } from '@/lib/auth'
 import { useAuth } from './AuthContext'
@@ -8,10 +8,22 @@ import { useAuth } from './AuthContext'
 type Stage = 'welcome' | 'form'
 type Mode = 'signin' | 'signup'
 
-export function AuthFlow({ onAuthenticated }: { onAuthenticated: (isNewUser: boolean) => void }) {
+export function AuthFlow({
+  onAuthenticated,
+  onClose,
+  intro,
+  initialMode = 'signup',
+}: {
+  onAuthenticated: (isNewUser: boolean) => void
+  /** When set, the flow renders as a dismissible modal (adds a Close control). */
+  onClose?: () => void
+  /** Optional banner above the welcome buttons (e.g. the trial savings receipt). */
+  intro?: ReactNode
+  initialMode?: Mode
+}) {
   const { login, register } = useAuth()
   const [stage, setStage] = useState<Stage>('welcome')
-  const [mode, setMode] = useState<Mode>('signup')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -46,8 +58,13 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (isNewUser: boo
   }
 
   return (
-    <div className="auth-screen">
+    <div className={onClose ? 'auth-screen auth-screen-modal' : 'auth-screen'}>
       <div className="auth-card">
+        {onClose && (
+          <button type="button" className="auth-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        )}
         <div className="auth-brand">
           <span style={{ color: 'var(--coral)' }}>
             <Burst size={40} />
@@ -58,6 +75,7 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (isNewUser: boo
 
         {stage === 'welcome' && (
           <div className="auth-block">
+            {intro}
             <p className="auth-lede">
               Every message is routed to the cheapest model that can do the job — strong answers
               without overpaying.

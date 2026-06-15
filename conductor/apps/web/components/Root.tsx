@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { AuthProviderComponent, useAuth } from './auth/AuthContext'
-import { AuthFlow } from './auth/AuthFlow'
 import { Pricing } from './auth/Pricing'
 import { Burst } from './Burst'
 import { Chat } from './Chat'
 
-/** Top-level gate: splash → auth → onboarding (new accounts) → chat. */
+/** Top-level gate: splash → chat (anonymous trial allowed) → onboarding for new
+ *  accounts. Signed-out visitors get the chat directly so they can try it before
+ *  the signup wall; Chat owns the sign-in/up modal and the trial wall. */
 export function Root() {
   return (
     <AuthProviderComponent>
@@ -41,7 +42,7 @@ function Gate() {
       </div>
     )
   }
-  if (!user) return <AuthFlow onAuthenticated={(isNewUser) => setOnboarding(isNewUser)} />
-  if (onboarding) return <Pricing mode="onboarding" onDone={() => setOnboarding(false)} />
-  return <Chat />
+  // A freshly-registered account sees plan onboarding once, then the chat.
+  if (user && onboarding) return <Pricing mode="onboarding" onDone={() => setOnboarding(false)} />
+  return <Chat onNewUser={() => setOnboarding(true)} />
 }

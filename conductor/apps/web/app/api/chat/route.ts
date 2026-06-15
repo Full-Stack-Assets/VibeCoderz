@@ -12,8 +12,20 @@ import type { RouteDecision } from '@/lib/types'
 import { currentUser } from '@/lib/server/session'
 import { chargeSplit, planLimits, sanitizeOverrides, usageStore } from '@/lib/server/plans'
 import { maybeAutoRecharge } from '@/lib/server/autorecharge'
+import { rateLimit, clientIp } from '@/lib/server/ratelimit'
 
 export const runtime = 'nodejs'
+
+// Anonymous trial: let a signed-out visitor run a few real turns before the
+// signup wall, so they taste the routing + savings receipt before committing.
+// Tightly bounded to cap cost/abuse: per-IP turn cap (the in-memory limiter is
+// per-instance — fine for a trial, since each turn is also cheap-model-only,
+// non-agentic, and token-capped). Off with CONDUCTOR_TRIAL=off (hard wall).
+const TRIAL_ENABLED = (process.env.CONDUCTOR_TRIAL || 'on').toLowerCase() !== 'off'
+const TRIAL_TURNS = Math.max(1, Number(process.env.CONDUCTOR_TRIAL_TURNS) || 5)
+const TRIAL_WINDOW_MS = Math.max(1, Number(process.env.CONDUCTOR_TRIAL_WINDOW_HOURS) || 24) * 60 * 60 * 1000
+const TRIAL_MAX_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_TRIAL_MAX_TOKENS) || 1024)
+const TRIAL_BUDGET_USD = Math.max(0.05, Number(process.env.CONDUCTOR_TRIAL_BUDGET_USD) || 0.5)
 
 interface ToolStep {
   tool: string
@@ -306,37 +318,61 @@ export async function POST(req: Request) {
   // budget (we track spend per account in the DB, not from the request) and
   // cannot pin premium models or quality floors beyond what its plan allows.
   const user = await currentUser(req)
-  if (!user) return new Response('Please sign in to chat.', { status: 401 })
-  const lim = planLimits(user.plan)
+  const anon = !user
+
+  // Anonymous trial: allow a few bounded turns before the signup wall. When the
+  // per-IP allowance is spent, return 402 so the client shows the wall.
+  let trialRemaining: number | null = null
+  if (anon) {
+    if (!TRIAL_ENABLED) return new Response('Please sign in to chat.', { status: 401 })
+    const rl = rateLimit(`trial:${clientIp(req)}`, TRIAL_TURNS, TRIAL_WINDOW_MS)
+    if (!rl.ok) {
+      return Response.json({ trialExhausted: true, retryAfterSec: rl.retryAfterSec }, { status: 402 })
+    }
+    trialRemaining = rl.remaining
+  }
+
+  const plan = user?.plan ?? 'free'
+  const lim = planLimits(plan)
   const periodMs = lim.periodDays * 24 * 60 * 60 * 1000
   const meter = await usageStore()
-  const spentUSD = await meter.getUserUsage(user.id, periodMs)
+  // Anonymous turns aren't metered against an account — the per-IP turn cap is
+  // the throttle — so spend starts at zero against a small fixed trial budget.
+  const spentUSD = user ? await meter.getUserUsage(user.id, periodMs) : 0
   // Effective budget = plan allowance + any purchased top-up credit. Plan
   // allowance resets each period; top-up credit rolls over and is consumed only
   // once the plan allowance is used up (see the split metering in step 5).
-  const planBudgetUSD = lim.budgetUSD
-  const topupUSD = await meter.getUserCredit(user.id)
+  const planBudgetUSD = anon ? TRIAL_BUDGET_USD : lim.budgetUSD
+  const topupUSD = user ? await meter.getUserCredit(user.id) : 0
   const budgetUSD = planBudgetUSD + topupUSD
-  const { preferModel, qualityFloor } = sanitizeOverrides(user.plan, body.preferModel, body.qualityFloor)
+  // The trial is deliberately constrained: never agentic (no sandbox/tools),
+  // no model/quality overrides, and a tighter token ceiling — keep it cheap.
+  const agentic = anon ? false : !!body.agentic
+  const maxTokens = anon ? Math.min(MAX_OUTPUT_TOKENS, TRIAL_MAX_TOKENS) : MAX_OUTPUT_TOKENS
+  const { preferModel, qualityFloor } = anon
+    ? { preferModel: undefined as string | undefined, qualityFloor: undefined as number | undefined }
+    : sanitizeOverrides(plan, body.preferModel, body.qualityFloor)
 
   const engineMessages = buildEngineMessages(messages)
   const hasImages = hasImageAttachment(messages)
 
   // Personalization: fold the user's durable memories into the system prompt so
   // every turn is informed by their saved preferences. Best-effort — never block
-  // a turn on memory.
+  // a turn on memory. (Skipped for the anonymous trial — there's no account.)
   let systemPrompt = SYSTEM
-  try {
-    const memStore = (await getStore()) as { listMemories?: (id: string) => Promise<Array<{ text: string }>> }
-    const mems = (await memStore.listMemories?.(user.id)) ?? []
-    if (mems.length) {
-      const block = mems.slice(0, 50).map((m) => `- ${m.text}`).join('\n')
-      systemPrompt =
-        `${SYSTEM}\n\nWhat you know about this user (their saved preferences — ` +
-        `honor them unless the current request overrides):\n${block}`
+  if (user) {
+    try {
+      const memStore = (await getStore()) as { listMemories?: (id: string) => Promise<Array<{ text: string }>> }
+      const mems = (await memStore.listMemories?.(user.id)) ?? []
+      if (mems.length) {
+        const block = mems.slice(0, 50).map((m) => `- ${m.text}`).join('\n')
+        systemPrompt =
+          `${SYSTEM}\n\nWhat you know about this user (their saved preferences — ` +
+          `honor them unless the current request overrides):\n${block}`
+      }
+    } catch {
+      /* memory is best-effort */
     }
-  } catch {
-    /* memory is best-effort */
   }
 
   const enc = new TextEncoder()
@@ -363,15 +399,15 @@ export async function POST(req: Request) {
           const window = lim.periodDays === 1 ? 'today' : 'this month'
           const resetWord = lim.periodDays === 1 ? 'daily' : 'monthly'
           const msg =
-            `**You've reached your ${user.plan} plan's budget** ($${planBudgetUSD.toFixed(2)} ${window}). ` +
+            `**You've reached your ${plan} plan's budget** ($${planBudgetUSD.toFixed(2)} ${window}). ` +
             `The orchestrator won't spend past your cap. It resets ${resetWord} — or **add credits** below to ` +
-            `keep going right now${user.plan === 'max' ? '.' : ', or upgrade for a higher monthly allowance and premium models.'}`
+            `keep going right now${plan === 'max' ? '.' : ', or upgrade for a higher monthly allowance and premium models.'}`
           for (const c of chunkText(msg)) {
             send('text', { delta: c })
             await sleep(8)
           }
           // capReached tells the client to surface the top-up ladder.
-          send('done', { costUSD: 0, simulated: true, spentUSD, topupUSD, capReached: true, conversationId: body.conversationId })
+          send('done', { costUSD: 0, simulated: true, spentUSD, topupUSD, capReached: true, anon, trialRemaining, conversationId: body.conversationId })
           controller.close()
           return
         }
@@ -387,12 +423,12 @@ export async function POST(req: Request) {
         // actually cost — the "you saved $X vs always-premium" receipt.
         let savedUSD = 0
 
-        if (body.agentic) {
+        if (agentic) {
           const out = await runAgentic(
             decision.model.id,
             engineMessages,
             (step) => send('tool', { step }),
-            MAX_OUTPUT_TOKENS,
+            maxTokens,
             lastUser(messages),
             { enabled: ESCALATE_ENABLED, qualityBar: QUALITY_BAR },
             systemPrompt
@@ -420,7 +456,7 @@ export async function POST(req: Request) {
             savedUSD = Math.max(0, Number((premiumCost - costUSD).toFixed(6)))
           }
         } else {
-          const opts = { system: systemPrompt, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
+          const opts = { system: systemPrompt, messages: engineMessages, maxTokens }
           const result = (await (ESCALATE_ENABLED
             ? completeWithEscalation(decision.model.id, opts, { qualityBar: QUALITY_BAR })
             : complete(decision.model.id, opts))) as {
@@ -458,37 +494,45 @@ export async function POST(req: Request) {
         // 5) Meter the spend: charge the plan allowance first, then draw any
         // overflow from rolled-over top-up credit so spent never exceeds the
         // plan cap and purchased credit is consumed only once it's needed.
-        const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
-        const newSpent = await meter.addUserUsage(user.id, fromPlan)
-        const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
-        // Off-session auto-recharge when credit runs low (opt-in, default-off,
-        // best-effort — never blocks the turn).
-        try {
-          await maybeAutoRecharge(user, newCredit)
-        } catch {
-          /* auto-recharge is best-effort */
-        }
-        // Accrue the lifetime "you saved $X vs premium" receipt (best-effort).
-        let totalSavedUSD = user.savedUSD ?? 0
-        if (savedUSD > 0) {
+        // Anonymous trial turns aren't metered/persisted (no account) — the
+        // per-IP turn cap is their throttle — but we still compute + report the
+        // savings receipt, which is the whole point of the trial.
+        let newSpent = spentUSD
+        let newCredit = topupUSD
+        let totalSavedUSD = user?.savedUSD ?? 0
+        let persisted: { conversationId?: string; messageId?: string } = { conversationId: body.conversationId }
+        if (user) {
+          const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
+          newSpent = await meter.addUserUsage(user.id, fromPlan)
+          newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
+          // Off-session auto-recharge when credit runs low (opt-in, default-off,
+          // best-effort — never blocks the turn).
           try {
-            totalSavedUSD = await meter.addUserSavings(user.id, savedUSD)
+            await maybeAutoRecharge(user, newCredit)
           } catch {
-            /* savings is a best-effort stat — never block a turn */
+            /* auto-recharge is best-effort */
           }
+          // Accrue the lifetime "you saved $X vs premium" receipt (best-effort).
+          if (savedUSD > 0) {
+            try {
+              totalSavedUSD = await meter.addUserSavings(user.id, savedUSD)
+            } catch {
+              /* savings is a best-effort stat — never block a turn */
+            }
+          }
+          persisted = await persist(body.conversationId, lastUser(messages), fullText, {
+            model: decision.model.id,
+            score: decision.score,
+            domain: decision.classification?.domain,
+            costUSD,
+            simulated,
+            agentic,
+            // Routing-quality signal for the measured-advantage flywheel (Phase 1):
+            // the judged quality and whether we had to escalate, per turn.
+            escalation,
+            savedUSD,
+          })
         }
-        const persisted = await persist(body.conversationId, lastUser(messages), fullText, {
-          model: decision.model.id,
-          score: decision.score,
-          domain: decision.classification?.domain,
-          costUSD,
-          simulated,
-          agentic: !!body.agentic,
-          // Routing-quality signal for the measured-advantage flywheel (Phase 1):
-          // the judged quality and whether we had to escalate, per turn.
-          escalation,
-          savedUSD,
-        })
         send('done', {
           costUSD,
           savedUSD,
@@ -498,6 +542,8 @@ export async function POST(req: Request) {
           escalation,
           spentUSD: Number(newSpent.toFixed(6)),
           topupUSD: Number(newCredit.toFixed(6)),
+          anon,
+          trialRemaining,
           conversationId: persisted.conversationId,
           // The stored assistant message id, so the client can attach feedback.
           messageId: persisted.messageId,
@@ -507,7 +553,7 @@ export async function POST(req: Request) {
         // Phase 4b: auto-extract durable memories from the user's message. Runs
         // AFTER 'done' (so the answer is already delivered) and best-effort — a
         // cheap, gated LLM call only on turns that look like a stated preference.
-        if (MEMORY_EXTRACT_ENABLED && !simulated) {
+        if (user && MEMORY_EXTRACT_ENABLED && !simulated) {
           try {
             const userText = lastUser(messages)
             if (looksLikePreference(userText)) {
