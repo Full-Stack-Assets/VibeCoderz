@@ -37,6 +37,13 @@ export async function POST(req: Request) {
   if (!auth) return err('invalid or missing API key', 401)
   const { user, keyId } = auth
 
+  // API access is a paid feature. Key creation already gates Free, but a user
+  // can hold a key minted while paid and later downgrade/cancel — re-check the
+  // CURRENT plan on every call so a lapsed account can't keep using the API.
+  if (user.plan === 'free') {
+    return err('The HTTP API is available on paid plans. Upgrade to Pro or Max to use your API key.', 402)
+  }
+
   // Per-key rate limit (by plan). 429 + Retry-After when exceeded.
   const rl = rateLimit(`apikey:${keyId}`, RATE_PER_MIN[user.plan] ?? 60, 60_000)
   if (!rl.ok) {

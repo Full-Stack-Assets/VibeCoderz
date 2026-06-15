@@ -98,6 +98,41 @@ test('referral codes are unique, resolvable, and recorded on the referee', async
   assert.equal(await store.getUserByReferralCode('nope'), null);
 })
 
+test('referral reward is one-shot per referee, capped per referrer, and only for the referred', async () => {
+  const store = new InMemoryStore();
+  const ref = await store.createUser({ email: 'r@x.com', passwordHash: 'h' });
+  const a = await store.createUser({ email: 'a@x.com', passwordHash: 'h', referredBy: ref.id });
+
+  // First paid action pays out once, returning the referrer to credit.
+  assert.equal(await store.claimReferralReward(a.id), ref.id);
+  // A second paid action by the same referee never pays again (one-shot).
+  assert.equal(await store.claimReferralReward(a.id), null, 'no double payout per referee');
+
+  // A user who wasn't referred yields nothing.
+  const solo = await store.createUser({ email: 'solo@x.com', passwordHash: 'h' });
+  assert.equal(await store.claimReferralReward(solo.id), null);
+
+  // Per-referrer cap: with the referrer already at the cap, the referee is
+  // still consumed (one-shot) but no payout is returned.
+  const b = await store.createUser({ email: 'b@x.com', passwordHash: 'h', referredBy: ref.id });
+  assert.equal(await store.claimReferralReward(b.id, 1), null, 'cap blocks payout');
+  assert.equal(await store.claimReferralReward(b.id, 99), null, 'referee already consumed even when blocked');
+})
+
+test('auto-recharge prefs persist and the recharge claim is single-shot + clearable', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 'ar@x.com', passwordHash: 'h' });
+  // Defaults: disabled.
+  assert.equal((await store.getAutoRecharge(u.id)).enabled, false);
+  const s = await store.setAutoRecharge(u.id, { enabled: true, thresholdUSD: 3, packId: 'p25' });
+  assert.deepEqual([s.enabled, s.thresholdUSD, s.packId], [true, 3, 'p25']);
+  // Atomic claim: first wins, a concurrent claim is refused until cleared.
+  assert.equal(await store.claimRecharge(u.id), true);
+  assert.equal(await store.claimRecharge(u.id), false, 'no double-charge while in flight');
+  await store.clearRecharge(u.id);
+  assert.equal(await store.claimRecharge(u.id), true, 'reclaimable after clear');
+})
+
 test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
   const store = new InMemoryStore();
   // First delivery claims it; a duplicate delivery is rejected (skip side effects).

@@ -13,7 +13,16 @@ Status: **B3 (native sponsorships) is shipped** (`lib/sponsors.ts` +
 
 ---
 
-## B1 — Auto-recharge top-ups (off-session)
+## B1 — Auto-recharge top-ups (off-session)  ·  IMPLEMENTED (default-off)
+**Status:** built end-to-end behind `CONDUCTOR_AUTORECHARGE` (default **off**):
+per-user prefs + atomic recharge claim on all stores; top-up checkout now saves
+the card (`setup_future_usage=off_session`); `chargeOffSession` + the chat-route
+trigger (`maybeAutoRecharge`); `payment_intent.succeeded/payment_failed` webhook
+handling (grant + clear / disable); `/api/billing/auto-recharge` + a UI control.
+**Before flipping it on: validate the off-session charge + both webhook events in
+Stripe TEST mode.** It cannot charge anyone until the flag is on AND a user opts
+in AND a card is on file.
+
 **Goal:** when a user's top-up credit runs low, automatically buy their chosen
 pack so heavy users never hit a wall — opt-in.
 

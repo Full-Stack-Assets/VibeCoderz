@@ -125,6 +125,24 @@ export class InMemoryStore {
     return id ? this.users.get(id) : null;
   }
 
+  /**
+   * One-shot referral payout, claimed when a referee FIRST pays (not at signup,
+   * which is trivially farmable with throwaway accounts). Returns the referrer's
+   * id exactly once — when the referee was referred, hasn't been rewarded yet,
+   * AND the referrer is under the per-referrer cap — so the caller can credit
+   * both sides; null otherwise. The referee's flag is flipped first so repeated
+   * paid events reward at most once even if the cap blocks the payout.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = this.users.get(refereeId);
+    if (!referee || !referee.referredBy || referee.referralRewarded) return null;
+    referee.referralRewarded = true; // consume the referral regardless of outcome
+    const referrer = this.users.get(referee.referredBy);
+    if (!referrer || (referrer.referralRewards || 0) >= maxRewards) return null;
+    referrer.referralRewards = (referrer.referralRewards || 0) + 1;
+    return referrer.id;
+  }
+
   async getUserById(id) {
     return this.users.get(id) || null;
   }
@@ -204,6 +222,46 @@ export class InMemoryStore {
     if (!u) return 0;
     u.savedUSD = Math.max(0, (u.savedUSD || 0) + (deltaUSD || 0));
     return u.savedUSD;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+  // Stored flat on the user; a turn fires a charge only when the global flag is
+  // on AND the user opted in AND credit is low AND no recharge is in flight.
+
+  async getAutoRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    return {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD || 0,
+      packId: u.autoRechargePackId || null,
+      inFlightAt: u.rechargeInFlightAt || null,
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    if (enabled !== undefined) u.autoRechargeEnabled = !!enabled;
+    if (thresholdUSD !== undefined) u.autoRechargeThresholdUSD = Math.max(0, Number(thresholdUSD) || 0);
+    if (packId !== undefined) u.autoRechargePackId = packId || null;
+    return this.getAutoRecharge(userId);
+  }
+
+  /** Atomically claim a recharge so concurrent low-credit turns don't double-charge.
+   *  A claim older than 10 min is treated as stale and re-claimable. */
+  async claimRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return false;
+    const now = Date.now();
+    if (u.rechargeInFlightAt && now - u.rechargeInFlightAt < 10 * 60 * 1000) return false;
+    u.rechargeInFlightAt = now;
+    return true;
+  }
+
+  async clearRecharge(userId) {
+    const u = this.users.get(userId);
+    if (u) u.rechargeInFlightAt = null;
   }
 
   // --- Per-account conversation snapshots ---------------------------------

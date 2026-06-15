@@ -724,6 +724,15 @@ textarea:focus-visible, [tabindex]:focus-visible {
 }
 .topup-upgrade:hover { background: var(--coral-press); }
 
+/* ---- Auto-recharge control (top-up section) ------------------------------ */
+.autorecharge { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.autorecharge-row { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.autorecharge-cfg { margin-top: var(--space-2); font-size: 13px; color: var(--muted); }
+.autorecharge-cfg select {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 3px 6px; margin: 0 2px;
+}
+
 /* ---- Native sponsored slot (free tier, empty state) ---------------------- */
 .sponsored {
   display: inline-flex; align-items: center; gap: var(--space-3);

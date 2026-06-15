@@ -103,9 +103,49 @@ export async function createTopupCheckoutSession(opts: {
     'metadata[userId]': opts.userId,
     'metadata[packId]': opts.packId,
     'metadata[creditUSD]': String(opts.creditUSD),
+    // Save the card so the user can opt into off-session auto-recharge later.
+    'payment_intent_data[setup_future_usage]': 'off_session',
   })) as { url?: string }
   if (!session.url) throw new Error('Stripe did not return a checkout URL.')
   return { url: session.url }
+}
+
+async function stripeGet(path: string) {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('Stripe is not configured.')
+  const res = await fetch(`${STRIPE_API}${path}`, { headers: { Authorization: `Bearer ${key}` } })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((json as { error?: { message?: string } })?.error?.message || `Stripe error ${res.status}`)
+  return json
+}
+
+/**
+ * Charge a saved card off-session (for auto-recharge). Uses the customer's most
+ * recent card. Throws on no-card / decline / SCA-required so the caller can stop
+ * auto-recharge rather than retry a failing card. Credit is granted by the
+ * payment_intent.succeeded webhook (idempotent), not here.
+ */
+export async function chargeOffSession(opts: {
+  customerId: string
+  amountUSD: number
+  metadata: Record<string, string>
+}): Promise<{ id: string; status: string }> {
+  const pms = (await stripeGet(`/payment_methods?customer=${opts.customerId}&type=card&limit=1`)) as {
+    data?: { id: string }[]
+  }
+  const pmId = pms.data?.[0]?.id
+  if (!pmId) throw new Error('no saved card on file')
+  const body: Record<string, string | undefined> = {
+    amount: String(Math.round(opts.amountUSD * 100)),
+    currency: 'usd',
+    customer: opts.customerId,
+    payment_method: pmId,
+    off_session: 'true',
+    confirm: 'true',
+  }
+  for (const [k, v] of Object.entries(opts.metadata)) body[`metadata[${k}]`] = v
+  const pi = (await stripePost('/payment_intents', body)) as { id?: string; status?: string }
+  return { id: pi.id || '', status: pi.status || 'unknown' }
 }
 
 export async function createPortalSession(opts: { customerId: string; returnUrl: string }): Promise<{ url: string }> {

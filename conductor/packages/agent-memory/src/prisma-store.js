@@ -201,6 +201,60 @@ export class PrismaStore {
     return this.db.user.findUnique({ where: { referralCode: String(code || '').trim() } });
   }
 
+  /**
+   * One-shot referral payout on the referee's FIRST paid action. Atomically
+   * claims the referee's flag, then pays out only while the referrer is under
+   * the per-referrer cap; returns the referrer id once, else null.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = await this.db.user.findUnique({ where: { id: refereeId } });
+    if (!referee?.referredBy || referee.referralRewarded) return null;
+    const claimed = await this.db.user.updateMany({
+      where: { id: refereeId, referralRewarded: false },
+      data: { referralRewarded: true },
+    });
+    if (claimed.count === 0) return null; // a concurrent paid event already claimed it
+    const bumped = await this.db.user.updateMany({
+      where: { id: referee.referredBy, referralRewards: { lt: maxRewards } },
+      data: { referralRewards: { increment: 1 } },
+    });
+    return bumped.count > 0 ? referee.referredBy : null;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+  async getAutoRecharge(userId) {
+    const u = await this.db.user.findUnique({ where: { id: userId } });
+    if (!u) return null;
+    return {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD || 0,
+      packId: u.autoRechargePackId || null,
+      inFlightAt: u.rechargeInFlightAt == null ? null : Number(u.rechargeInFlightAt),
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const data = {};
+    if (enabled !== undefined) data.autoRechargeEnabled = !!enabled;
+    if (thresholdUSD !== undefined) data.autoRechargeThresholdUSD = Math.max(0, Number(thresholdUSD) || 0);
+    if (packId !== undefined) data.autoRechargePackId = packId || null;
+    if (Object.keys(data).length) await this.db.user.update({ where: { id: userId }, data });
+    return this.getAutoRecharge(userId);
+  }
+
+  async claimRecharge(userId) {
+    const cutoff = BigInt(Date.now() - 10 * 60 * 1000);
+    const r = await this.db.user.updateMany({
+      where: { id: userId, OR: [{ rechargeInFlightAt: null }, { rechargeInFlightAt: { lt: cutoff } }] },
+      data: { rechargeInFlightAt: BigInt(Date.now()) },
+    });
+    return r.count > 0;
+  }
+
+  async clearRecharge(userId) {
+    await this.db.user.update({ where: { id: userId }, data: { rechargeInFlightAt: null } }).catch(() => {});
+  }
+
   async getUserById(id) {
     return this.db.user.findUnique({ where: { id } });
   }

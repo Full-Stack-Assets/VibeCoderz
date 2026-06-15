@@ -47,10 +47,12 @@ top-up bar that appears at the budget cap (`Chat.tsx` `capReached`).
 ### A4. Referral credits
 **What:** a referral code that grants both parties top-up credit on the
 referee's first paid action.
-**Why now:** cheap, viral, and on-brand (the cost-savings hook is shareable). The
-grant primitive already exists (`addUserCredit`).
-**Where:** a `referrals` table + a code on signup; grant via `addUserCredit`.
-**Effort: ~1–2 days.**
+**Why now:** cheap, viral, and on-brand (the cost-savings hook is shareable).
+**Where:** a `referralCode`/`referredBy` on the user (set at signup); the payout
+fires on the referee's first Stripe `checkout.session.completed` via the atomic,
+one-shot `claimReferralReward` store primitive (capped per referrer by
+`REFERRAL_MAX_REWARDS`), then `addUserCredit` both sides. **Not** granted at
+signup — that's trivially farmed with throwaway accounts. **Effort: ~1–2 days.**
 
 ---
 
