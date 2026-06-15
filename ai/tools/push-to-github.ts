@@ -40,8 +40,8 @@ export const pushToGithubTool = tool({
           private: isPrivate,
           auto_init: true,
         })
-      } catch (error: any) {
-        if (error.status === 422) {
+      } catch (error) {
+        if ((error as { status?: number }).status === 422) {
           // Repository already exists, get it
           repo = await octokit.rest.repos.get({
             owner,
