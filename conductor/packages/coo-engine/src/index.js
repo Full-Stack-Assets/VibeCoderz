@@ -15,6 +15,7 @@ export { makeAnthropicToolPlanner, makeOpenAIToolPlanner, makeLiveToolPlanner, c
 export { classifyTurn, detectSensitive } from './classify.js';
 export { MODEL_CATALOG, getModel, modelsAsAgents, visionModels } from './catalog.js';
 export { completeWithEscalation, judgeAnswer, topModelId, parseScore, defaultJudgeModelId } from './escalate.js';
+export { extractMemories, looksLikePreference, parseMemoryList } from './memory-extract.js';
 export {
   calculateFitnessScore,
   findBestAgentForTask,

@@ -321,6 +321,9 @@ export function Chat() {
             patch(pendingId, (m) => ({ ...m, pending: false, steps: [...(m.steps || []), step] }))
           } else if (event === 'escalation') {
             patch(pendingId, (m) => ({ ...m, escalation: data.escalation as Msg['escalation'] }))
+          } else if (event === 'memory') {
+            // A memory was auto-extracted server-side; nudge the panel to reload.
+            if (typeof window !== 'undefined') window.dispatchEvent(new Event('conductor:memory-changed'))
           } else if (event === 'text') {
             patch(pendingId, (m) => ({ ...m, pending: false, content: m.content + String(data.delta ?? '') }))
           } else if (event === 'done') {

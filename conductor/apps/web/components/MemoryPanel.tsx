@@ -36,6 +36,14 @@ export function MemoryPanel() {
     else setMemories([])
   }, [user, load])
 
+  // Reload when the chat stream auto-extracts a new memory.
+  useEffect(() => {
+    if (!user) return
+    const onChange = () => void load()
+    window.addEventListener('conductor:memory-changed', onChange)
+    return () => window.removeEventListener('conductor:memory-changed', onChange)
+  }, [user, load])
+
   if (!user) return null
 
   const add = async () => {

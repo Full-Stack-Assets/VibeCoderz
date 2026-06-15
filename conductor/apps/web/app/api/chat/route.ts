@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD, extractMemories, looksLikePreference } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -102,6 +102,8 @@ const MAX_OUTPUT_TOKENS = Math.max(256, Number(process.env.CONDUCTOR_MAX_TOKENS)
 // is a 0..1 quality score; tune with CONDUCTOR_QUALITY_BAR.
 const ESCALATE_ENABLED = (process.env.CONDUCTOR_ESCALATE || 'on').toLowerCase() !== 'off'
 const QUALITY_BAR = Math.min(1, Math.max(0, Number(process.env.CONDUCTOR_QUALITY_BAR) || 0.6))
+// Auto-extract durable memories from preference-stating turns (off to disable).
+const MEMORY_EXTRACT_ENABLED = (process.env.CONDUCTOR_MEMORY_EXTRACT || 'on').toLowerCase() !== 'off'
 // Only verify/escalate models below this capability — re-checking an already
 // top-tier model just burns money. Mirrors the default in coo-engine/escalate.js.
 const ESCALATE_BELOW_CAPABILITY = 0.95
@@ -466,6 +468,31 @@ export async function POST(req: Request) {
           messageId: persisted.messageId,
           stepCount: steps.length,
         })
+
+        // Phase 4b: auto-extract durable memories from the user's message. Runs
+        // AFTER 'done' (so the answer is already delivered) and best-effort — a
+        // cheap, gated LLM call only on turns that look like a stated preference.
+        if (MEMORY_EXTRACT_ENABLED && !simulated) {
+          try {
+            const userText = lastUser(messages)
+            if (looksLikePreference(userText)) {
+              const memStore = (await getStore()) as {
+                listMemories?: (id: string) => Promise<Array<{ id: string; text: string; createdAt: number }>>
+                addMemory?: (id: string, text: string) => Promise<{ id: string; text: string; createdAt: number }>
+              }
+              const existing = (await memStore.listMemories?.(user.id)) ?? []
+              if (existing.length < 50) {
+                const facts = await extractMemories({ text: userText, existing: existing.map((m) => m.text) })
+                for (const f of facts.slice(0, 50 - existing.length)) {
+                  const saved = await memStore.addMemory?.(user.id, f)
+                  if (saved) send('memory', { memory: saved })
+                }
+              }
+            }
+          } catch {
+            /* memory extraction is best-effort */
+          }
+        }
         controller.close()
       } catch (err) {
         send('error', { error: (err as Error).message })
