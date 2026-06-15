@@ -20,5 +20,5 @@ export {
   CHEAPEST_MODEL,
   BALANCED_MODEL,
 } from './strategies.js';
-export { evaluate, scoreStrategy } from './run.js';
+export { evaluate, scoreStrategy, evaluateModels } from './run.js';
 export { renderReport } from './report.js';

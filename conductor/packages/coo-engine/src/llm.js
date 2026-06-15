@@ -115,6 +115,15 @@ function meter(model, usage) {
   return Number(((input / 1e6) * p.input + (output / 1e6) * p.output).toFixed(6));
 }
 
+/**
+ * What a given catalog model WOULD cost for the same token usage — used to
+ * compute "you saved $X vs always-premium" against the model the router picked.
+ */
+export function costForModel(modelId, usage) {
+  const model = getModel(modelId);
+  return model ? meter(model, usage) : 0;
+}
+
 // Map a catalog id (e.g. "anthropic/claude-opus-4.8") to the provider's wire id.
 function wireModelId(model) {
   const id = model.id.includes('/') ? model.id.split('/').slice(1).join('/') : model.id;
@@ -198,7 +207,12 @@ async function callOpenAICompatible(model, { system, messages, maxTokens }, { ba
       // Native providers want the bare model id; gateways want the full
       // `provider/model` catalog id. `modelName` overrides when given.
       model: modelName || wireModelId(model),
-      max_tokens: maxTokens,
+      // OpenAI's GPT-5 family (incl. gpt-5.3-codex) rejects `max_tokens` on Chat
+      // Completions with a 400 and requires `max_completion_tokens`. Other
+      // providers (xAI, Google via gateway) still take `max_tokens`.
+      ...(model.provider === 'openai'
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: toOpenAIContent(m.content) })),
@@ -249,11 +263,12 @@ export function simulate(model, { messages }) {
 export async function complete(modelId, opts = {}) {
   const model = getModel(modelId);
   if (!model) throw new Error(`unknown model ${modelId}`);
-  const { system, messages = [], maxTokens = 1024 } = opts;
+  const { system, messages = [], maxTokens = 4096 } = opts;
 
   const gw = gatewayConfig();
   const canGoLive = gw || hasKey(model.provider);
 
+  let liveError = null;
   if (canGoLive) {
     // A live attempt can still fail at the network/provider edge (gateway not
     // funded, model temporarily unavailable, transient 5xx past retries). Rather
@@ -288,11 +303,12 @@ export async function complete(modelId, opts = {}) {
       } else {
         throw new Error(`no transport for provider ${model.provider}`);
       }
-      return { ...result, model: model.id, provider, costUSD: meter(model, result.usage), simulated: false };
+      return { ...result, model: model.id, provider, costUSD: meter(model, result.usage), simulated: false, simReason: null };
     } catch (err) {
+      liveError = String(err?.message || err);
       console.warn(
         `[coo-engine] live completion failed for ${model.id} ` +
-          `(${err?.message || err}); falling back to simulation.`
+          `(${liveError}); falling back to simulation.`
       );
     }
   }
@@ -304,5 +320,10 @@ export async function complete(modelId, opts = {}) {
     provider: gw ? `gateway:${gw.kind}` : model.provider,
     costUSD: meter(model, sim.usage),
     simulated: true,
+    // Why this turn simulated, so "key set but still simulating" is diagnosable:
+    // a swallowed live error (the usual cause) vs. no credential at all.
+    simReason: liveError
+      ? `live call failed: ${liveError}`
+      : 'no provider credential configured (set AI_GATEWAY_API_KEY / OPENROUTER_API_KEY / a native key)',
   };
 }

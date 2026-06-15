@@ -14,11 +14,13 @@ import { getExecutor, SimulatedExecutor, LocalSandboxExecutor, VercelSandboxExec
 import { runAgenticTurn, makeSimulatedPlanner } from './agent-loop.js';
 import { runPureTool, calculator, currentTime, analyzeData } from './pure-tools.js';
 import { runWebTool, webSearch, fetchUrl, webEnabled } from './web-tools.js';
+import { McpHttpClient, registerMcpTools, parseMcpConfig } from './mcp.js';
 
 export { TOOLS, TOOL_NAMES, PURE_TOOL_NAMES, getTool, getExecutor, SimulatedExecutor, LocalSandboxExecutor, VercelSandboxExecutor };
 export { runAgenticTurn, makeSimulatedPlanner };
 export { runPureTool, calculator, currentTime, analyzeData };
 export { runWebTool, webSearch, fetchUrl, webEnabled };
+export { McpHttpClient, registerMcpTools, parseMcpConfig };
 
 /**
  * Registry of available tools. Seeded with the built-in sandbox tools; MCP

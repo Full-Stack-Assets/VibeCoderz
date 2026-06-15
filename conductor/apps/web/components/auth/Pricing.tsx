@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { PLANS, TOPUP_PACKS, type PlanId } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { useAuth } from './AuthContext'
+import { AutoRechargeControl } from './AutoRechargeControl'
 
 export function Pricing({
   mode,
@@ -19,6 +20,7 @@ export function Pricing({
   const hasSubscription = !!user?.subscriptionStatus && user.subscriptionStatus !== 'canceled'
 
   const [selected, setSelected] = useState<PlanId>(currentPlan)
+  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly')
   const [busy, setBusy] = useState(false)
   const [toppingUp, setToppingUp] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +71,7 @@ export function Pricing({
     }
     setBusy(true)
     try {
-      window.location.href = await startCheckout(selected)
+      window.location.href = await startCheckout(selected, cycle)
     } catch (e) {
       setError((e as Error).message)
       setBusy(false)
@@ -112,10 +114,30 @@ export function Pricing({
           </p>
         )}
 
+        <div className="billing-cycle" role="group" aria-label="Billing cycle">
+          <button
+            type="button"
+            className={`cycle-opt ${cycle === 'monthly' ? 'active' : ''}`}
+            aria-pressed={cycle === 'monthly'}
+            onClick={() => setCycle('monthly')}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            className={`cycle-opt ${cycle === 'annual' ? 'active' : ''}`}
+            aria-pressed={cycle === 'annual'}
+            onClick={() => setCycle('annual')}
+          >
+            Annual <span className="cycle-save">2 months free</span>
+          </button>
+        </div>
+
         <div className="pricing-grid">
           {PLANS.map((plan) => {
             const active = selected === plan.id
             const isCurrent = currentPlan === plan.id
+            const annual = cycle === 'annual' && plan.annual
             return (
               <button
                 key={plan.id}
@@ -129,9 +151,10 @@ export function Pricing({
                   {isCurrent && <span className="plan-badge current">Current</span>}
                 </div>
                 <div className="plan-price">
-                  {plan.price}
-                  <span className="plan-period"> {plan.period}</span>
+                  {annual ? `${annual.perMonth}` : plan.price}
+                  <span className="plan-period"> {annual ? '/mo' : plan.period}</span>
                 </div>
+                {annual && <p className="plan-annual-note">{annual.price} billed yearly</p>}
                 <p className="plan-tagline">{plan.tagline}</p>
                 <ul className="plan-features">
                   {plan.features.map((f) => (
@@ -172,6 +195,7 @@ export function Pricing({
                 </button>
               ))}
             </div>
+            <AutoRechargeControl />
           </div>
         )}
 

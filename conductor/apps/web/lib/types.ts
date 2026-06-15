@@ -15,7 +15,16 @@ export interface RouteDecision {
   overridden: boolean
   optimizerChoice: string | null
   candidates: { id: string; label: string; score: number; typeMatch: boolean }[]
-  classification: { type: string; domain?: string; complexity: number; minQuality: number; requiresVision?: boolean }
+  classification: {
+    type: string
+    domain?: string
+    complexity: number
+    minQuality: number
+    requiresVision?: boolean
+    /** High-stakes category ('medical' | 'legal' | 'financial' | 'crisis') that raised a safety floor. */
+    sensitive?: string | null
+    safetyFloor?: number
+  }
   estCostUSD: number
   budget: { budgetUSD: number; spentUSD: number; utilization: number; throttled: boolean }
   reason: string
@@ -73,6 +82,23 @@ export interface Attachment {
   size: number
 }
 
+/** Verify-and-escalate audit for a turn: did we judge the cheap answer, and
+ * did we escalate to a stronger model because it missed the quality bar? */
+export interface Escalation {
+  evaluated: boolean
+  escalated: boolean
+  firstModel?: string
+  firstLabel?: string
+  finalModel?: string
+  finalLabel?: string
+  /** pass case: judged score of the (kept) cheap answer, 0..1 */
+  score?: number
+  /** escalated case: judged score that triggered escalation, 0..1 */
+  firstScore?: number
+  qualityBar?: number
+  reason?: string
+}
+
 export interface Msg {
   id: string
   role: 'user' | 'assistant'
@@ -84,4 +110,9 @@ export interface Msg {
   pending?: boolean
   error?: boolean
   steps?: ToolStep[]
+  escalation?: Escalation
+  /** Stored message id (from the server) — needed to attach feedback. */
+  storeId?: string
+  /** User quality label for this turn. */
+  feedback?: 'up' | 'down'
 }

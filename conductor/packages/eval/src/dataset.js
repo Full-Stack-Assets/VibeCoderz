@@ -96,6 +96,66 @@ export const DATASET = [
     prompt: 'What is shown in this screenshot and what is the likely bug?' },
   { id: 'vision-hard-1', domain: 'vision', idealType: 'reasoning', difficulty: 0.82, requiresVision: true,
     prompt: 'Read this architecture diagram image and identify the single point of failure.' },
+
+  // === expanded set (wider statistical basis, same per-domain difficulty spread) ===
+
+  // --- coding -------------------------------------------------------------
+  { id: 'code-mid-3', domain: 'coding', idealType: 'code', difficulty: 0.6,
+    prompt: 'Write a Python function that merges overlapping intervals and returns the minimal set.' },
+  { id: 'code-mid-4', domain: 'coding', idealType: 'code', difficulty: 0.72,
+    prompt: 'Implement a retry-with-exponential-backoff wrapper in TypeScript that respects an AbortSignal.' },
+  { id: 'code-hard-3', domain: 'coding', idealType: 'code', difficulty: 0.9,
+    prompt: 'Implement a thread-safe LRU cache in Go with O(1) get/put and explain the synchronization strategy.' },
+
+  // --- reasoning / architecture ------------------------------------------
+  { id: 'reason-easy-2', domain: 'reasoning', idealType: 'reasoning', difficulty: 0.4,
+    prompt: 'When should a service use eventual vs strong consistency? Give a one-paragraph rule of thumb.' },
+  { id: 'reason-mid-3', domain: 'reasoning', idealType: 'reasoning', difficulty: 0.64,
+    prompt: 'Compare gRPC and REST for an internal microservice mesh and recommend one with justification.' },
+  { id: 'reason-hard-3', domain: 'reasoning', idealType: 'reasoning', difficulty: 0.9,
+    prompt: 'Design an idempotent, exactly-once payment webhook processor and argue why duplicate deliveries cannot double-charge.' },
+
+  // --- writing ------------------------------------------------------------
+  { id: 'write-easy-3', domain: 'writing', idealType: 'writing', difficulty: 0.38,
+    prompt: 'Write a one-line conventional-commit message for a fix that prevents a null dereference on logout.' },
+  { id: 'write-mid-3', domain: 'writing', idealType: 'writing', difficulty: 0.6,
+    prompt: 'Draft a changelog entry explaining a breaking API change and the migration path for callers.' },
+  { id: 'write-hard-2', domain: 'writing', idealType: 'writing', difficulty: 0.84,
+    prompt: 'Write an incident postmortem narrative — timeline, impact, root cause, and remediation — for a 40-minute outage.' },
+
+  // --- analysis -----------------------------------------------------------
+  { id: 'analysis-easy-2', domain: 'analysis', idealType: 'analysis', difficulty: 0.44,
+    prompt: 'Given weekly active users for 8 weeks, state whether growth is accelerating or decelerating and by how much.' },
+  { id: 'analysis-mid-3', domain: 'analysis', idealType: 'analysis', difficulty: 0.64,
+    prompt: 'Given conversion rates and spend by channel, identify which channel is underperforming relative to its spend.' },
+  { id: 'analysis-hard-2', domain: 'analysis', idealType: 'analysis', difficulty: 0.86,
+    prompt: 'Given a cohort retention matrix, diagnose whether churn is a day-1 onboarding problem or long-term value decay.' },
+
+  // --- research (live-information; routes on analysis) --------------------
+  { id: 'research-easy-2', domain: 'research', idealType: 'analysis', difficulty: 0.46,
+    prompt: 'Find the latest Ubuntu LTS version and link its release notes.' },
+  { id: 'research-mid-3', domain: 'research', idealType: 'analysis', difficulty: 0.62,
+    prompt: 'Summarize the current state of WebGPU support across major browsers, with sources.' },
+  { id: 'research-hard-2', domain: 'research', idealType: 'analysis', difficulty: 0.82,
+    prompt: 'Research differing benchmarks for two vector databases, weigh the methodology, and recommend one for a 100M-vector workload.' },
+
+  // --- data (structured; routes on analysis) -----------------------------
+  { id: 'data-easy-2', domain: 'data', idealType: 'analysis', difficulty: 0.5,
+    prompt: 'Given a JSON array of orders, compute total revenue and the top 3 products by quantity.' },
+  { id: 'data-mid-2', domain: 'data', idealType: 'analysis', difficulty: 0.7,
+    prompt: 'Given a CSV of API latencies, compute p50/p95/p99 per endpoint and flag the worst endpoint.' },
+  { id: 'data-mid-3', domain: 'data', idealType: 'analysis', difficulty: 0.68,
+    prompt: 'Join these two CSVs on user_id and report how many rows fail to match on each side.' },
+  { id: 'data-hard-2', domain: 'data', idealType: 'analysis', difficulty: 0.86,
+    prompt: 'Given a semi-structured event log, infer session boundaries from inactivity gaps and compute median session length.' },
+
+  // --- vision (image input; requires a multimodal model) -----------------
+  { id: 'vision-easy-2', domain: 'vision', idealType: 'reasoning', difficulty: 0.46, requiresVision: true,
+    prompt: 'Describe the layout and the primary call-to-action in this landing-page screenshot.' },
+  { id: 'vision-mid-2', domain: 'vision', idealType: 'reasoning', difficulty: 0.62, requiresVision: true,
+    prompt: 'From this dashboard screenshot, identify which metric looks anomalous and explain why.' },
+  { id: 'vision-hard-2', domain: 'vision', idealType: 'reasoning', difficulty: 0.84, requiresVision: true,
+    prompt: 'Read this sequence-diagram image and identify a potential race condition between two participants.' },
 ];
 
 /** Sanity invariants the dataset must satisfy (asserted in tests). */

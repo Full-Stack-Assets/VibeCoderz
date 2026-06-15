@@ -50,12 +50,31 @@ CREATE TABLE IF NOT EXISTS users (
   spent_usd double precision NOT NULL DEFAULT 0,
   spend_period_start bigint NOT NULL DEFAULT 0,
   topup_credit_usd double precision NOT NULL DEFAULT 0,
+  saved_usd double precision NOT NULL DEFAULT 0,
+  referral_code text,
+  referred_by text,
+  referral_rewarded boolean NOT NULL DEFAULT false,
+  referral_rewards integer NOT NULL DEFAULT 0,
+  auto_recharge_enabled boolean NOT NULL DEFAULT false,
+  auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0,
+  auto_recharge_pack_id text,
+  recharge_in_flight_at bigint,
   created_at bigint NOT NULL
 );
 -- Backfill columns on databases created before usage metering existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS saved_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewards integer NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_pack_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recharge_in_flight_at bigint;
+CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code ON users (referral_code);
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -89,6 +108,30 @@ CREATE TABLE IF NOT EXISTS tool_executions (
   created_at bigint NOT NULL,
   seq bigserial
 );
+CREATE TABLE IF NOT EXISTS user_memories (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text text NOT NULL,
+  created_at bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS user_memories_user ON user_memories (user_id, created_at);
+CREATE TABLE IF NOT EXISTS api_keys (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label text NOT NULL DEFAULT 'API key',
+  hash text NOT NULL UNIQUE,
+  created_at bigint NOT NULL,
+  last_used_at bigint,
+  requests bigint NOT NULL DEFAULT 0,
+  cost_usd double precision NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys (hash);
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS requests bigint NOT NULL DEFAULT 0;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS cost_usd double precision NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS processed_events (
+  id text PRIMARY KEY,
+  created_at bigint NOT NULL
+);
 `;
 
 const mapUser = (r) =>
@@ -102,6 +145,12 @@ const mapUser = (r) =>
     stripeCustomerId: r.stripe_customer_id,
     subscriptionStatus: r.subscription_status,
     topupUSD: Number(r.topup_credit_usd) || 0,
+    savedUSD: Number(r.saved_usd) || 0,
+    referralCode: r.referral_code || null,
+    referredBy: r.referred_by || null,
+    autoRechargeEnabled: !!r.auto_recharge_enabled,
+    autoRechargeThresholdUSD: Number(r.auto_recharge_threshold_usd) || 0,
+    autoRechargePackId: r.auto_recharge_pack_id || null,
     createdAt: Number(r.created_at),
   };
 
@@ -195,6 +244,105 @@ export class PgStore {
     return rows;
   }
 
+  // --- Webhook idempotency -------------------------------------------------
+
+  async markEventProcessed(eventId) {
+    const { rowCount } = await this.q(
+      `INSERT INTO processed_events (id, created_at) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+      [eventId, Date.now()]
+    );
+    return rowCount > 0;
+  }
+
+  async releaseEvent(eventId) {
+    await this.q(`DELETE FROM processed_events WHERE id = $1`, [eventId]);
+  }
+
+  // --- API keys (public API auth) -----------------------------------------
+
+  async createApiKey(userId, label, hash) {
+    const kid = id('ak');
+    const now = Date.now();
+    await this.q(
+      `INSERT INTO api_keys (id, user_id, label, hash, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      [kid, userId, label || 'API key', hash, now]
+    );
+    return { id: kid, label: label || 'API key', createdAt: now };
+  }
+
+  async resolveApiKey(hash) {
+    const { rows } = await this.q(`SELECT id, user_id FROM api_keys WHERE hash = $1`, [hash]);
+    if (!rows[0]) return null;
+    await this.q(`UPDATE api_keys SET last_used_at = $2 WHERE id = $1`, [rows[0].id, Date.now()]);
+    return { id: rows[0].id, userId: rows[0].user_id };
+  }
+
+  async listApiKeys(userId) {
+    const { rows } = await this.q(
+      `SELECT id, label, created_at, last_used_at, requests, cost_usd FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId]
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      label: r.label,
+      createdAt: Number(r.created_at),
+      lastUsedAt: r.last_used_at == null ? null : Number(r.last_used_at),
+      requests: Number(r.requests) || 0,
+      costUSD: Number(r.cost_usd) || 0,
+    }));
+  }
+
+  async bumpApiKeyUsage(keyId, costUSD) {
+    await this.q(
+      `UPDATE api_keys SET requests = requests + 1, cost_usd = cost_usd + $2 WHERE id = $1`,
+      [keyId, costUSD || 0]
+    );
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const { rowCount } = await this.q(`DELETE FROM api_keys WHERE id = $1 AND user_id = $2`, [keyId, userId]);
+    return rowCount > 0;
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+
+  async addMemory(userId, text) {
+    const mid = id('mem');
+    const now = Date.now();
+    await this.q(
+      `INSERT INTO user_memories (id, user_id, text, created_at) VALUES ($1, $2, $3, $4)`,
+      [mid, userId, String(text), now]
+    );
+    return { id: mid, text: String(text), createdAt: now };
+  }
+
+  async listMemories(userId) {
+    const { rows } = await this.q(
+      `SELECT id, text, created_at FROM user_memories WHERE user_id = $1 ORDER BY created_at ASC`,
+      [userId]
+    );
+    return rows.map((r) => ({ id: r.id, text: r.text, createdAt: Number(r.created_at) }));
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const { rowCount } = await this.q(
+      `DELETE FROM user_memories WHERE id = $1 AND user_id = $2`,
+      [memoryId, userId]
+    );
+    return rowCount > 0;
+  }
+
+  // Merge a quality-feedback signal into a message's meta (jsonb || merge).
+  async recordFeedback(conversationId, messageId, signal) {
+    const fb = JSON.stringify({ feedback: { signal, at: Date.now() } });
+    const { rowCount } = await this.q(
+      `UPDATE messages SET meta = coalesce(meta, '{}'::jsonb) || $3::jsonb
+       WHERE id = $1 AND conversation_id = $2`,
+      [messageId, conversationId, fb]
+    );
+    return rowCount > 0;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
 
   async upsertConversation({ id: cid, ownerId, title, updatedAt, snapshot }) {
@@ -243,13 +391,14 @@ export class PgStore {
 
   // --- Accounts & sessions ------------------------------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
     const uid = id('user');
+    const referralCode = randomUUID().replace(/-/g, '').slice(0, 8);
     const { rows } = await this.q(
-      `INSERT INTO users (id, email, name, password_hash, plan, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (id, email, name, password_hash, plan, role, referral_code, referred_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (email) DO NOTHING RETURNING *`,
-      [uid, String(email).trim(), name || null, passwordHash, plan, role, Date.now()]
+      [uid, String(email).trim(), name || null, passwordHash, plan, role, referralCode, referredBy || null, Date.now()]
     );
     if (rows.length === 0) throw new Error('An account with that email already exists.');
     return mapUser(rows[0]);
@@ -258,6 +407,36 @@ export class PgStore {
   async getUserByEmail(email) {
     const { rows } = await this.q(`SELECT * FROM users WHERE email = $1`, [String(email).trim()]);
     return mapUser(rows[0]) || null;
+  }
+
+  async getUserByReferralCode(code) {
+    const { rows } = await this.q(`SELECT * FROM users WHERE referral_code = $1`, [String(code || '').trim()]);
+    return mapUser(rows[0]) || null;
+  }
+
+  /**
+   * One-shot referral payout on the referee's FIRST paid action (signup grants
+   * are trivially farmable). Atomically flips the referee's one-shot flag and,
+   * if the referrer is still under the per-referrer cap, bumps their counter —
+   * returning the referrer id so the caller credits both sides. null otherwise.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    // Flip the referee's flag exactly once; capture who referred them.
+    const { rows } = await this.q(
+      `UPDATE users SET referral_rewarded = true
+       WHERE id = $1 AND referred_by IS NOT NULL AND referral_rewarded = false
+       RETURNING referred_by`,
+      [refereeId]
+    );
+    const referrerId = rows[0]?.referred_by;
+    if (!referrerId) return null;
+    // Pay out only while the referrer is under the cap (atomic guard).
+    const { rowCount } = await this.q(
+      `UPDATE users SET referral_rewards = referral_rewards + 1
+       WHERE id = $1 AND referral_rewards < $2`,
+      [referrerId, maxRewards]
+    );
+    return rowCount > 0 ? referrerId : null;
   }
 
   async getUserById(uid) {
@@ -349,5 +528,60 @@ export class PgStore {
       [userId, deltaUSD || 0]
     );
     return rows[0] ? Number(rows[0].topup_credit_usd) : 0;
+  }
+
+  async getUserSavings(userId) {
+    const { rows } = await this.q(`SELECT saved_usd FROM users WHERE id = $1`, [userId]);
+    return rows[0] ? Number(rows[0].saved_usd) || 0 : 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const { rows } = await this.q(
+      `UPDATE users SET saved_usd = GREATEST(0, saved_usd + $2) WHERE id = $1 RETURNING saved_usd`,
+      [userId, deltaUSD || 0]
+    );
+    return rows[0] ? Number(rows[0].saved_usd) : 0;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+
+  async getAutoRecharge(userId) {
+    const { rows } = await this.q(
+      `SELECT auto_recharge_enabled, auto_recharge_threshold_usd, auto_recharge_pack_id, recharge_in_flight_at FROM users WHERE id = $1`,
+      [userId]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      enabled: !!r.auto_recharge_enabled,
+      thresholdUSD: Number(r.auto_recharge_threshold_usd) || 0,
+      packId: r.auto_recharge_pack_id || null,
+      inFlightAt: r.recharge_in_flight_at == null ? null : Number(r.recharge_in_flight_at),
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const sets = [];
+    const vals = [userId];
+    if (enabled !== undefined) { vals.push(!!enabled); sets.push(`auto_recharge_enabled = $${vals.length}`); }
+    if (thresholdUSD !== undefined) { vals.push(Math.max(0, Number(thresholdUSD) || 0)); sets.push(`auto_recharge_threshold_usd = $${vals.length}`); }
+    if (packId !== undefined) { vals.push(packId || null); sets.push(`auto_recharge_pack_id = $${vals.length}`); }
+    if (sets.length) await this.q(`UPDATE users SET ${sets.join(', ')} WHERE id = $1`, vals);
+    return this.getAutoRecharge(userId);
+  }
+
+  /** Atomic claim: set in-flight only if it's currently null or stale (>10 min). */
+  async claimRecharge(userId) {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const { rowCount } = await this.q(
+      `UPDATE users SET recharge_in_flight_at = $2
+       WHERE id = $1 AND (recharge_in_flight_at IS NULL OR recharge_in_flight_at < $3)`,
+      [userId, Date.now(), cutoff]
+    );
+    return rowCount > 0;
+  }
+
+  async clearRecharge(userId) {
+    await this.q(`UPDATE users SET recharge_in_flight_at = NULL WHERE id = $1`, [userId]);
   }
 }

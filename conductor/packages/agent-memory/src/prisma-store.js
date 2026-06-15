@@ -8,6 +8,8 @@
  * dependency or database present.
  */
 
+import { randomUUID } from 'node:crypto';
+
 export class PrismaStore {
   /** @param {import('@prisma/client').PrismaClient} client */
   constructor(client) {
@@ -53,6 +55,81 @@ export class PrismaStore {
       where: { conversationId },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  // --- Webhook idempotency -------------------------------------------------
+
+  async markEventProcessed(eventId) {
+    try {
+      await this.db.processedEvent.create({ data: { id: eventId } });
+      return true;
+    } catch {
+      return false; // unique-constraint violation → already processed
+    }
+  }
+
+  async releaseEvent(eventId) {
+    await this.db.processedEvent.deleteMany({ where: { id: eventId } });
+  }
+
+  // --- API keys (public API auth) -----------------------------------------
+
+  async createApiKey(userId, label, hash) {
+    const r = await this.db.apiKey.create({ data: { userId, label: label || 'API key', hash } });
+    return { id: r.id, label: r.label, createdAt: r.createdAt };
+  }
+
+  async resolveApiKey(hash) {
+    const r = await this.db.apiKey.findUnique({ where: { hash } });
+    if (!r) return null;
+    await this.db.apiKey.update({ where: { id: r.id }, data: { lastUsedAt: new Date() } });
+    return { id: r.id, userId: r.userId };
+  }
+
+  async listApiKeys(userId) {
+    return this.db.apiKey.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, label: true, createdAt: true, lastUsedAt: true, requests: true, costUSD: true },
+    });
+  }
+
+  async bumpApiKeyUsage(keyId, costUSD) {
+    await this.db.apiKey
+      .update({ where: { id: keyId }, data: { requests: { increment: 1 }, costUSD: { increment: costUSD || 0 } } })
+      .catch(() => {});
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const r = await this.db.apiKey.deleteMany({ where: { id: keyId, userId } });
+    return r.count > 0;
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+
+  async addMemory(userId, text) {
+    return this.db.userMemory.create({ data: { userId, text: String(text) } });
+  }
+
+  async listMemories(userId) {
+    return this.db.userMemory.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const r = await this.db.userMemory.deleteMany({ where: { id: memoryId, userId } });
+    return r.count > 0;
+  }
+
+  // Merge a quality-feedback signal into a message's meta (read-merge-write,
+  // since Prisma has no deep-merge for a Json column).
+  async recordFeedback(conversationId, messageId, signal) {
+    const m = await this.db.message.findFirst({ where: { id: messageId, conversationId } });
+    if (!m) return false;
+    await this.db.message.update({
+      where: { id: messageId },
+      data: { meta: { ...(m.meta || {}), feedback: { signal, at: Date.now() } } },
+    });
+    return true;
   }
 
   // --- Per-account conversation snapshots ---------------------------------
@@ -109,14 +186,73 @@ export class PrismaStore {
 
   // --- Accounts & sessions ------------------------------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
+    const referralCode = randomUUID().replace(/-/g, '').slice(0, 8);
     return this.db.user.create({
-      data: { email: String(email).trim(), name: name || null, passwordHash, plan, role },
+      data: { email: String(email).trim(), name: name || null, passwordHash, plan, role, referralCode, referredBy: referredBy || null },
     });
   }
 
   async getUserByEmail(email) {
     return this.db.user.findUnique({ where: { email: String(email).trim() } });
+  }
+
+  async getUserByReferralCode(code) {
+    return this.db.user.findUnique({ where: { referralCode: String(code || '').trim() } });
+  }
+
+  /**
+   * One-shot referral payout on the referee's FIRST paid action. Atomically
+   * claims the referee's flag, then pays out only while the referrer is under
+   * the per-referrer cap; returns the referrer id once, else null.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = await this.db.user.findUnique({ where: { id: refereeId } });
+    if (!referee?.referredBy || referee.referralRewarded) return null;
+    const claimed = await this.db.user.updateMany({
+      where: { id: refereeId, referralRewarded: false },
+      data: { referralRewarded: true },
+    });
+    if (claimed.count === 0) return null; // a concurrent paid event already claimed it
+    const bumped = await this.db.user.updateMany({
+      where: { id: referee.referredBy, referralRewards: { lt: maxRewards } },
+      data: { referralRewards: { increment: 1 } },
+    });
+    return bumped.count > 0 ? referee.referredBy : null;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+  async getAutoRecharge(userId) {
+    const u = await this.db.user.findUnique({ where: { id: userId } });
+    if (!u) return null;
+    return {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD || 0,
+      packId: u.autoRechargePackId || null,
+      inFlightAt: u.rechargeInFlightAt == null ? null : Number(u.rechargeInFlightAt),
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const data = {};
+    if (enabled !== undefined) data.autoRechargeEnabled = !!enabled;
+    if (thresholdUSD !== undefined) data.autoRechargeThresholdUSD = Math.max(0, Number(thresholdUSD) || 0);
+    if (packId !== undefined) data.autoRechargePackId = packId || null;
+    if (Object.keys(data).length) await this.db.user.update({ where: { id: userId }, data });
+    return this.getAutoRecharge(userId);
+  }
+
+  async claimRecharge(userId) {
+    const cutoff = BigInt(Date.now() - 10 * 60 * 1000);
+    const r = await this.db.user.updateMany({
+      where: { id: userId, OR: [{ rechargeInFlightAt: null }, { rechargeInFlightAt: { lt: cutoff } }] },
+      data: { rechargeInFlightAt: BigInt(Date.now()) },
+    });
+    return r.count > 0;
+  }
+
+  async clearRecharge(userId) {
+    await this.db.user.update({ where: { id: userId }, data: { rechargeInFlightAt: null } }).catch(() => {});
   }
 
   async getUserById(id) {
@@ -144,5 +280,16 @@ export class PrismaStore {
   async deleteSession(token) {
     await this.db.session.delete({ where: { token } }).catch(() => {});
     return true;
+  }
+
+  // Lifetime routing savings (vs always-premium) — the value receipt.
+  async getUserSavings(userId) {
+    const u = await this.db.user.findUnique({ where: { id: userId } });
+    return u?.savedUSD || 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const u = await this.db.user.update({ where: { id: userId }, data: { savedUSD: { increment: deltaUSD || 0 } } });
+    return u.savedUSD;
   }
 }

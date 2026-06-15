@@ -89,3 +89,38 @@ test('unknown model yields no live planner', () => {
     assert.equal(makeLiveToolPlanner({ modelId: 'nope/model', ...ARGS }), null);
   });
 });
+
+test('OpenAI/gateway planner replays the assistant tool-call turn with content:null (gateway→Anthropic fix)', async () => {
+  // Regression: an empty-string content on the assistant tool-call message broke
+  // the gateway's OpenAI→Anthropic translation (the tool_use block was dropped,
+  // orphaning the following tool_result). The replayed turn must use content:null.
+  const reqs = [];
+  const origFetch = global.fetch;
+  const origKey = process.env.AI_GATEWAY_API_KEY;
+  process.env.AI_GATEWAY_API_KEY = 'gw-test';
+  global.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    reqs.push(body);
+    const message =
+      reqs.length === 1
+        ? { role: 'assistant', content: null, tool_calls: [{ id: 'toolu_1', type: 'function', function: { name: 'run_command', arguments: '{}' } }] }
+        : { role: 'assistant', content: 'all done' };
+    return { ok: true, json: async () => ({ choices: [{ message }] }) };
+  };
+  try {
+    const planner = makeLiveToolPlanner({ modelId: 'anthropic/claude-opus-4.8', ...ARGS });
+    const a1 = await planner([]);
+    assert.equal(a1.type, 'tool');
+    const a2 = await planner([{ tool: 'run_command', args: {}, result: { ok: true, output: 'x' } }]);
+    assert.equal(a2.type, 'final');
+    // The second request replays the transcript: assistant tool-call turn + result.
+    const asst = reqs[1].messages.find((m) => m.role === 'assistant' && m.tool_calls);
+    assert.ok(asst, 'assistant tool-call turn is replayed');
+    assert.equal(asst.content, null, 'content is null, not an empty string');
+    assert.equal(reqs[1].messages.find((m) => m.role === 'tool').tool_call_id, 'toolu_1');
+  } finally {
+    global.fetch = origFetch;
+    if (origKey === undefined) delete process.env.AI_GATEWAY_API_KEY;
+    else process.env.AI_GATEWAY_API_KEY = origKey;
+  }
+});

@@ -10,17 +10,19 @@ const STRIPE_API = 'https://api.stripe.com/v1'
 
 export const stripeConfigured = () => !!process.env.STRIPE_SECRET_KEY
 
-export function priceIdForPlan(plan: PlanId): string | undefined {
-  if (plan === 'pro') return process.env.STRIPE_PRICE_PRO
-  if (plan === 'max') return process.env.STRIPE_PRICE_MAX
+export type BillingCycle = 'monthly' | 'annual'
+
+export function priceIdForPlan(plan: PlanId, cycle: BillingCycle = 'monthly'): string | undefined {
+  if (plan === 'pro') return cycle === 'annual' ? process.env.STRIPE_PRICE_PRO_ANNUAL : process.env.STRIPE_PRICE_PRO
+  if (plan === 'max') return cycle === 'annual' ? process.env.STRIPE_PRICE_MAX_ANNUAL : process.env.STRIPE_PRICE_MAX
   return undefined
 }
 
-/** Reverse a Stripe price id back to a plan (for subscription webhooks). */
+/** Reverse a Stripe price id back to a plan (for subscription webhooks) — both cycles. */
 export function planForPriceId(priceId: string | undefined): PlanId | null {
   if (!priceId) return null
-  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
-  if (priceId === process.env.STRIPE_PRICE_MAX) return 'max'
+  if (priceId === process.env.STRIPE_PRICE_PRO || priceId === process.env.STRIPE_PRICE_PRO_ANNUAL) return 'pro'
+  if (priceId === process.env.STRIPE_PRICE_MAX || priceId === process.env.STRIPE_PRICE_MAX_ANNUAL) return 'max'
   return null
 }
 
@@ -101,9 +103,49 @@ export async function createTopupCheckoutSession(opts: {
     'metadata[userId]': opts.userId,
     'metadata[packId]': opts.packId,
     'metadata[creditUSD]': String(opts.creditUSD),
+    // Save the card so the user can opt into off-session auto-recharge later.
+    'payment_intent_data[setup_future_usage]': 'off_session',
   })) as { url?: string }
   if (!session.url) throw new Error('Stripe did not return a checkout URL.')
   return { url: session.url }
+}
+
+async function stripeGet(path: string) {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('Stripe is not configured.')
+  const res = await fetch(`${STRIPE_API}${path}`, { headers: { Authorization: `Bearer ${key}` } })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((json as { error?: { message?: string } })?.error?.message || `Stripe error ${res.status}`)
+  return json
+}
+
+/**
+ * Charge a saved card off-session (for auto-recharge). Uses the customer's most
+ * recent card. Throws on no-card / decline / SCA-required so the caller can stop
+ * auto-recharge rather than retry a failing card. Credit is granted by the
+ * payment_intent.succeeded webhook (idempotent), not here.
+ */
+export async function chargeOffSession(opts: {
+  customerId: string
+  amountUSD: number
+  metadata: Record<string, string>
+}): Promise<{ id: string; status: string }> {
+  const pms = (await stripeGet(`/payment_methods?customer=${opts.customerId}&type=card&limit=1`)) as {
+    data?: { id: string }[]
+  }
+  const pmId = pms.data?.[0]?.id
+  if (!pmId) throw new Error('no saved card on file')
+  const body: Record<string, string | undefined> = {
+    amount: String(Math.round(opts.amountUSD * 100)),
+    currency: 'usd',
+    customer: opts.customerId,
+    payment_method: pmId,
+    off_session: 'true',
+    confirm: 'true',
+  }
+  for (const [k, v] of Object.entries(opts.metadata)) body[`metadata[${k}]`] = v
+  const pi = (await stripePost('/payment_intents', body)) as { id?: string; status?: string }
+  return { id: pi.id || '', status: pi.status || 'unknown' }
 }
 
 export async function createPortalSession(opts: { customerId: string; returnUrl: string }): Promise<{ url: string }> {
@@ -115,8 +157,16 @@ export async function createPortalSession(opts: { customerId: string; returnUrl:
   return { url: session.url }
 }
 
-/** Verify a Stripe webhook signature (the `Stripe-Signature` header). */
-export function verifyWebhook(payload: string, signatureHeader: string | null, secret: string): boolean {
+/**
+ * Verify a Stripe webhook signature (the `Stripe-Signature` header), rejecting
+ * stale/replayed events outside `toleranceSec` (Stripe's default is 5 minutes).
+ */
+export function verifyWebhook(
+  payload: string,
+  signatureHeader: string | null,
+  secret: string,
+  toleranceSec = 300
+): boolean {
   if (!signatureHeader || !secret) return false
   const parts = Object.fromEntries(
     signatureHeader.split(',').map((kv) => {
@@ -127,6 +177,9 @@ export function verifyWebhook(payload: string, signatureHeader: string | null, s
   const t = parts['t']
   const v1 = parts['v1']
   if (!t || !v1) return false
+  // Replay guard: the signed timestamp must be within the tolerance window.
+  const ts = Number(t)
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > toleranceSec) return false
   const expected = createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex')
   try {
     const a = Buffer.from(expected)

@@ -63,6 +63,13 @@ model User {
   role               String    @default("user") // 'user' | 'admin'
   stripeCustomerId   String?
   subscriptionStatus String? // Stripe subscription status, e.g. 'active'
+  savedUSD           Float     @default(0) // lifetime routing savings vs always-premium
+  referralCode       String?   @unique
+  referredBy         String? // referrer's user id, if signed up via a referral
+  autoRechargeEnabled      Boolean @default(false)
+  autoRechargeThresholdUSD Float   @default(0)
+  autoRechargePackId       String?
+  rechargeInFlightAt       BigInt?
   createdAt          DateTime  @default(now())
   sessions           Session[]
 }
@@ -73,6 +80,36 @@ model Session {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Durable per-user memory: long-lived preferences/facts injected into each turn.
+model UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// Webhook idempotency: ids of provider events already handled.
+model ProcessedEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
+}
+
+// API keys for the public API. Only the SHA-256 hash is stored.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  label      String    @default("API key")
+  hash       String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  requests   Int       @default(0)
+  costUSD    Float     @default(0)
 
   @@index([userId])
 }

@@ -18,12 +18,81 @@ export class InMemoryStore {
     this.owned = new Map(); // id -> { id, ownerId, title, updatedAt, snapshot }
     this.users = new Map(); // id -> User
     this.usersByEmail = new Map(); // lowercased email -> id
+    this.usersByReferralCode = new Map(); // referral code -> id
     this.sessions = new Map(); // token -> { token, userId, expiresAt }
+    this.memories = new Map(); // userId -> [{ id, text, createdAt }] durable prefs
+    this.apiKeys = new Map(); // keyId -> { id, userId, label, hash, createdAt, lastUsedAt }
+    this.processedEvents = new Set(); // webhook event ids already handled (idempotency)
+  }
+
+  // --- Webhook idempotency -------------------------------------------------
+  // Atomically claim a webhook event id. Returns true if newly claimed, false
+  // if it was already processed (a duplicate/replayed delivery to skip).
+  async markEventProcessed(eventId) {
+    if (this.processedEvents.has(eventId)) return false;
+    this.processedEvents.add(eventId);
+    return true;
+  }
+
+  /** Release a claim so a failed handler can be retried by the provider. */
+  async releaseEvent(eventId) {
+    this.processedEvents.delete(eventId);
+  }
+
+  // --- API keys (public API auth) -----------------------------------------
+  // Only the SHA-256 hash of a key is stored; the plaintext is shown once at
+  // creation and never persisted.
+
+  async createApiKey(userId, label, hash) {
+    const rec = { id: nextId('ak'), userId, label: label || 'API key', hash, createdAt: Date.now(), lastUsedAt: null, requests: 0, costUSD: 0 };
+    this.apiKeys.set(rec.id, rec);
+    return { id: rec.id, label: rec.label, createdAt: rec.createdAt };
+  }
+
+  /** Record one API call against a key (request count + metered cost). */
+  async bumpApiKeyUsage(keyId, costUSD) {
+    const rec = this.apiKeys.get(keyId);
+    if (!rec) return;
+    rec.requests = (rec.requests || 0) + 1;
+    rec.costUSD = (rec.costUSD || 0) + (costUSD || 0);
+  }
+
+  /** Resolve a key hash to its owner; bumps lastUsedAt. */
+  async resolveApiKey(hash) {
+    for (const rec of this.apiKeys.values()) {
+      if (rec.hash === hash) {
+        rec.lastUsedAt = Date.now();
+        return { id: rec.id, userId: rec.userId };
+      }
+    }
+    return null;
+  }
+
+  async listApiKeys(userId) {
+    return [...this.apiKeys.values()]
+      .filter((r) => r.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((r) => ({ id: r.id, label: r.label, createdAt: r.createdAt, lastUsedAt: r.lastUsedAt, requests: r.requests || 0, costUSD: r.costUSD || 0 }));
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const rec = this.apiKeys.get(keyId);
+    if (!rec || rec.userId !== userId) return false;
+    this.apiKeys.delete(keyId);
+    return true;
   }
 
   // --- Accounts & sessions (email + password auth) ------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  _newReferralCode() {
+    let code;
+    do {
+      code = Math.random().toString(36).slice(2, 10);
+    } while (this.usersByReferralCode.has(code));
+    return code;
+  }
+
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
     const key = String(email).trim().toLowerCase();
     if (this.usersByEmail.has(key)) throw new Error('An account with that email already exists.');
     const user = {
@@ -36,16 +105,42 @@ export class InMemoryStore {
       stripeCustomerId: null,
       subscriptionStatus: null,
       topupUSD: 0,
+      referralCode: this._newReferralCode(),
+      referredBy: referredBy || null,
       createdAt: Date.now(),
     };
     this.users.set(user.id, user);
     this.usersByEmail.set(key, user.id);
+    this.usersByReferralCode.set(user.referralCode, user.id);
     return user;
   }
 
   async getUserByEmail(email) {
     const id = this.usersByEmail.get(String(email).trim().toLowerCase());
     return id ? this.users.get(id) : null;
+  }
+
+  async getUserByReferralCode(code) {
+    const id = this.usersByReferralCode.get(String(code || '').trim());
+    return id ? this.users.get(id) : null;
+  }
+
+  /**
+   * One-shot referral payout, claimed when a referee FIRST pays (not at signup,
+   * which is trivially farmable with throwaway accounts). Returns the referrer's
+   * id exactly once — when the referee was referred, hasn't been rewarded yet,
+   * AND the referrer is under the per-referrer cap — so the caller can credit
+   * both sides; null otherwise. The referee's flag is flipped first so repeated
+   * paid events reward at most once even if the cap blocks the payout.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = this.users.get(refereeId);
+    if (!referee || !referee.referredBy || referee.referralRewarded) return null;
+    referee.referralRewarded = true; // consume the referral regardless of outcome
+    const referrer = this.users.get(referee.referredBy);
+    if (!referrer || (referrer.referralRewards || 0) >= maxRewards) return null;
+    referrer.referralRewards = (referrer.referralRewards || 0) + 1;
+    return referrer.id;
   }
 
   async getUserById(id) {
@@ -113,6 +208,60 @@ export class InMemoryStore {
     if (!u) return 0;
     u.topupUSD = Math.max(0, (u.topupUSD || 0) + (deltaUSD || 0));
     return u.topupUSD;
+  }
+
+  // --- Lifetime routing savings (vs always-premium) — the value receipt ----
+
+  async getUserSavings(userId) {
+    const u = this.users.get(userId);
+    return u ? u.savedUSD || 0 : 0;
+  }
+
+  async addUserSavings(userId, deltaUSD) {
+    const u = this.users.get(userId);
+    if (!u) return 0;
+    u.savedUSD = Math.max(0, (u.savedUSD || 0) + (deltaUSD || 0));
+    return u.savedUSD;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+  // Stored flat on the user; a turn fires a charge only when the global flag is
+  // on AND the user opted in AND credit is low AND no recharge is in flight.
+
+  async getAutoRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    return {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD || 0,
+      packId: u.autoRechargePackId || null,
+      inFlightAt: u.rechargeInFlightAt || null,
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    if (enabled !== undefined) u.autoRechargeEnabled = !!enabled;
+    if (thresholdUSD !== undefined) u.autoRechargeThresholdUSD = Math.max(0, Number(thresholdUSD) || 0);
+    if (packId !== undefined) u.autoRechargePackId = packId || null;
+    return this.getAutoRecharge(userId);
+  }
+
+  /** Atomically claim a recharge so concurrent low-credit turns don't double-charge.
+   *  A claim older than 10 min is treated as stale and re-claimable. */
+  async claimRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return false;
+    const now = Date.now();
+    if (u.rechargeInFlightAt && now - u.rechargeInFlightAt < 10 * 60 * 1000) return false;
+    u.rechargeInFlightAt = now;
+    return true;
+  }
+
+  async clearRecharge(userId) {
+    const u = this.users.get(userId);
+    if (u) u.rechargeInFlightAt = null;
   }
 
   // --- Per-account conversation snapshots ---------------------------------
@@ -209,5 +358,42 @@ export class InMemoryStore {
 
   async getMessages(conversationId) {
     return [...(this.messages.get(conversationId) || [])];
+  }
+
+  // --- Durable per-user memory (personalization) --------------------------
+  // Long-lived preferences/facts, injected into every turn's system prompt so
+  // turn N+1 is smarter than turn 1. Separate from conversation transcripts.
+
+  async addMemory(userId, text) {
+    const list = this.memories.get(userId) || [];
+    const mem = { id: nextId('mem'), text: String(text), createdAt: Date.now() };
+    list.push(mem);
+    this.memories.set(userId, list);
+    return mem;
+  }
+
+  async listMemories(userId) {
+    return [...(this.memories.get(userId) || [])];
+  }
+
+  async deleteMemory(userId, memoryId) {
+    const list = this.memories.get(userId);
+    if (!list) return false;
+    const i = list.findIndex((m) => m.id === memoryId);
+    if (i === -1) return false;
+    list.splice(i, 1);
+    return true;
+  }
+
+  // --- Quality feedback (flywheel labels) ---------------------------------
+  // Attach a user signal ('up' | 'down') to a stored message's meta, alongside
+  // the routing/escalation metadata already there. Returns true if applied.
+  async recordFeedback(conversationId, messageId, signal) {
+    const list = this.messages.get(conversationId);
+    if (!list) return false;
+    const msg = list.find((m) => m.id === messageId);
+    if (!msg) return false;
+    msg.meta = { ...(msg.meta || {}), feedback: { signal, at: Date.now() } };
+    return true;
   }
 }

@@ -4,14 +4,31 @@ import { useEffect, useRef, useState } from 'react'
 import { Burst } from './Burst'
 import { Citations, DataChart } from './ToolResult'
 import { renderMarkdown } from '@/lib/markdown'
+import {
+  ThumbUpIcon,
+  ThumbDownIcon,
+  ShieldIcon,
+  EscalateIcon,
+  RefreshIcon,
+  CopyIcon,
+  CheckIcon,
+} from './icons'
 import type { Msg } from '@/lib/types'
+
+/** A calm word for the routing fit score (avoids leading with a raw %). */
+function confidenceWord(score: number): string {
+  if (score >= 0.8) return 'strong'
+  if (score >= 0.65) return 'good'
+  return 'fair'
+}
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false)
   return (
     <button
-      className="copy-btn"
-      title="Copy"
+      className={`icon-btn${done ? ' on' : ''}`}
+      title={done ? 'Copied' : 'Copy reply'}
+      aria-label="Copy reply"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text)
@@ -22,7 +39,7 @@ function CopyButton({ text }: { text: string }) {
         }
       }}
     >
-      {done ? 'Copied' : 'Copy'}
+      {done ? <CheckIcon /> : <CopyIcon />}
     </button>
   )
 }
@@ -67,16 +84,19 @@ export function Message({
   onInspect,
   onEdit,
   onRegenerate,
+  onFeedback,
 }: {
   msg: Msg
   onInspect?: () => void
   onEdit?: (id: string, content: string) => void
   onRegenerate?: () => void
+  onFeedback?: (signal: 'up' | 'down') => void
 }) {
   // Hook must run for every message (Rules of Hooks); the ref only binds below.
   const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [whyOpen, setWhyOpen] = useState(false)
 
   if (msg.role === 'user') {
     if (editing) {
@@ -186,7 +206,11 @@ export function Message({
                   const hasChart =
                     s.result.ok && s.tool === 'analyze_data' && (!!s.result.stats || !!s.result.columns?.length)
                   return (
-                    <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
+                    <div
+                      className={`tool-step ${s.result.ok ? '' : 'err'}`}
+                      key={i}
+                      style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+                    >
                       <div className="tool-step-h">
                         <span className="tool-badge">{s.tool}</span>
                         <code>{arg}</code>
@@ -222,30 +246,110 @@ export function Message({
           </>
         )}
         {msg.decision?.model && !msg.pending && (
+          <>
           <div className="msg-meta">
+            {/* Primary: the routed model. Click to expand a one-line "why" inline;
+                the full dimension breakdown is one more click away. */}
             <span
-              className="tag routed"
-              title={msg.decision.reason}
-              onClick={onInspect}
-              style={{ cursor: 'pointer' }}
+              className="tag model"
+              title="Why this model?"
+              role="button"
+              tabIndex={0}
+              aria-expanded={whyOpen}
+              onClick={() => setWhyOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setWhyOpen((v) => !v)
+                }
+              }}
             >
               <Burst size={11} /> {msg.decision.model.label}
             </span>
-            {msg.decision.classification?.domain && (
-              <span className="tag domain">{msg.decision.classification.domain}</span>
+            <span className="tag cost">${(msg.costUSD ?? 0).toFixed(4)}</span>
+
+            {/* Only noteworthy routing events surface inline. */}
+            {msg.escalation?.escalated && (
+              <span
+                className="tag status accent"
+                title={`Scored ${Math.round((msg.escalation.firstScore ?? 0) * 100)}/100 — below the ${Math.round((msg.escalation.qualityBar ?? 0) * 100)} bar — so the turn was escalated from ${msg.escalation.firstLabel} to ${msg.escalation.finalLabel}.`}
+              >
+                <EscalateIcon size={12} /> escalated
+              </span>
             )}
-            <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
-            <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
-            {msg.simulated && <span className="tag sim">simulated</span>}
-            {msg.decision.fallback && <span className="tag">fallback</span>}
-            {msg.decision.overridden && <span className="tag">override</span>}
-            {msg.content && <CopyButton text={msg.content} />}
-            {onRegenerate && (
-              <button className="msg-action" title="Regenerate reply" onClick={onRegenerate}>
-                Regenerate
-              </button>
+            {msg.decision.classification?.sensitive && (
+              <span
+                className="tag status"
+                title={`High-stakes (${msg.decision.classification.sensitive}) — held to a higher-capability model for safety.`}
+              >
+                <ShieldIcon size={12} /> {msg.decision.classification.sensitive}
+              </span>
             )}
+            {msg.simulated && (
+              <span className="tag sim" title="No live model configured — simulated response.">
+                simulated
+              </span>
+            )}
+
+            {/* Secondary actions reveal on hover (still keyboard-reachable). */}
+            <span className="msg-tools">
+              {onFeedback && (
+                <>
+                  <button
+                    className={`icon-btn${msg.feedback === 'up' ? ' on' : ''}`}
+                    title="Good answer"
+                    aria-label="Good answer"
+                    aria-pressed={msg.feedback === 'up'}
+                    onClick={() => onFeedback('up')}
+                  >
+                    <ThumbUpIcon />
+                  </button>
+                  <button
+                    className={`icon-btn danger${msg.feedback === 'down' ? ' on' : ''}`}
+                    title="Bad answer"
+                    aria-label="Bad answer"
+                    aria-pressed={msg.feedback === 'down'}
+                    onClick={() => onFeedback('down')}
+                  >
+                    <ThumbDownIcon />
+                  </button>
+                </>
+              )}
+              {msg.content && <CopyButton text={msg.content} />}
+              {onRegenerate && (
+                <button className="icon-btn" title="Regenerate reply" aria-label="Regenerate reply" onClick={onRegenerate}>
+                  <RefreshIcon />
+                </button>
+              )}
+            </span>
           </div>
+          {whyOpen && (
+            <div className="why">
+              <p className="why-reason">{msg.decision.reason}</p>
+              <div className="why-confidence" title={`Routing fit score ${Math.round(msg.decision.score * 100)}%`}>
+                <span className="why-conf-label">{confidenceWord(msg.decision.score)} match</span>
+                <span className="why-conf-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round(msg.decision.score * 100)}%` }} />
+                </span>
+                <span className="why-conf-pct">{Math.round(msg.decision.score * 100)}%</span>
+              </div>
+              {(msg.decision.classification?.domain || msg.decision.fallback || msg.decision.overridden) && (
+                <div className="why-stats">
+                  {msg.decision.classification?.domain && (
+                    <span className="why-stat">{msg.decision.classification.domain}</span>
+                  )}
+                  {msg.decision.fallback && <span className="why-stat">fallback</span>}
+                  {msg.decision.overridden && <span className="why-stat">manual override</span>}
+                </div>
+              )}
+              {onInspect && (
+                <button className="why-more" onClick={onInspect}>
+                  Full breakdown →
+                </button>
+              )}
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

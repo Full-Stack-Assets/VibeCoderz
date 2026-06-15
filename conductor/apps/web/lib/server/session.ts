@@ -16,7 +16,20 @@ export interface DBUser {
   stripeCustomerId: string | null
   subscriptionStatus: string | null
   topupUSD: number
+  savedUSD?: number
+  referralCode?: string | null
+  referredBy?: string | null
+  autoRechargeEnabled?: boolean
+  autoRechargeThresholdUSD?: number
+  autoRechargePackId?: string | null
   createdAt: number | Date
+}
+
+export interface AutoRecharge {
+  enabled: boolean
+  thresholdUSD: number
+  packId: string | null
+  inFlightAt?: number | null
 }
 
 export interface AuthStore {
@@ -26,8 +39,16 @@ export interface AuthStore {
     passwordHash: string
     plan?: PlanId
     role?: 'user' | 'admin'
+    referredBy?: string | null
   }): Promise<DBUser>
   getUserByEmail(email: string): Promise<DBUser | null>
+  getUserByReferralCode(code: string): Promise<DBUser | null>
+  /**
+   * Claim a one-shot referral payout on the referee's first paid action.
+   * Returns the referrer's id once (referred, not yet rewarded, referrer under
+   * the cap) so the caller credits both sides; null otherwise.
+   */
+  claimReferralReward(refereeId: string, maxRewards?: number): Promise<string | null>
   getUserById(id: string): Promise<DBUser | null>
   updateUser(id: string, patch: Partial<DBUser>): Promise<DBUser | null>
   createSession(userId: string, token: string, expiresAt: number): Promise<unknown>
@@ -35,6 +56,18 @@ export interface AuthStore {
   deleteSession(token: string): Promise<unknown>
   /** Grant top-up routing credit (e.g. from a completed Stripe payment). */
   addUserCredit(userId: string, deltaUSD: number): Promise<number>
+  /** Atomically claim a webhook event id; false if already processed. */
+  markEventProcessed(eventId: string): Promise<boolean>
+  /** Release an event claim so a failed handler can be retried. */
+  releaseEvent(eventId: string): Promise<void>
+  /** Lifetime routing savings vs. always-premium (the value receipt). */
+  getUserSavings(userId: string): Promise<number>
+  addUserSavings(userId: string, deltaUSD: number): Promise<number>
+  /** Auto-recharge (off-session top-up) preferences + the in-flight claim. */
+  getAutoRecharge(userId: string): Promise<AutoRecharge | null>
+  setAutoRecharge(userId: string, patch: Partial<Omit<AutoRecharge, 'inFlightAt'>>): Promise<AutoRecharge | null>
+  claimRecharge(userId: string): Promise<boolean>
+  clearRecharge(userId: string): Promise<void>
 }
 
 export async function authStore(): Promise<AuthStore> {
@@ -49,6 +82,9 @@ export interface PublicUser {
   role: 'user' | 'admin'
   subscriptionStatus: string | null
   topupUSD: number
+  savedUSD: number
+  referralCode: string | null
+  autoRecharge: { enabled: boolean; thresholdUSD: number; packId: string | null }
 }
 
 export function toPublicUser(u: DBUser): PublicUser {
@@ -60,6 +96,13 @@ export function toPublicUser(u: DBUser): PublicUser {
     role: u.role,
     subscriptionStatus: u.subscriptionStatus,
     topupUSD: u.topupUSD ?? 0,
+    savedUSD: u.savedUSD ?? 0,
+    referralCode: u.referralCode ?? null,
+    autoRecharge: {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD ?? 0,
+      packId: u.autoRechargePackId ?? null,
+    },
   }
 }
 

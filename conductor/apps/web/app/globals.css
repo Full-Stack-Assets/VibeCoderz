@@ -38,6 +38,14 @@
   --radius: 24px;
   --radius-sm: 14px;
   --radius-xs: 10px;
+
+  /* spacing scale — prefer these over magic numbers / inline styles */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
   --shadow-soft: 0 1px 2px rgba(20, 20, 19, 0.04), 0 8px 24px -12px rgba(20, 20, 19, 0.12);
   --shadow-raised: 0 1px 0 rgba(20, 20, 19, 0.03), 0 12px 32px -16px rgba(20, 20, 19, 0.18);
 
@@ -269,6 +277,16 @@ body {
   max-width: 440px;
   font-size: 15.5px;
 }
+/* Capability transparency: what Conductor can do, before the first message. */
+.capabilities {
+  display: flex; flex-wrap: wrap; gap: var(--space-5); justify-content: center;
+}
+.cap { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-soft); }
+.cap svg { color: var(--coral); }
+.routing-hook { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 440px; }
+.routing-hook a { color: var(--coral-press); font-weight: 600; text-decoration: none; }
+.routing-hook a:hover { text-decoration: underline; }
+
 .suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -277,17 +295,48 @@ body {
   margin-top: 10px;
 }
 .chip {
+  display: inline-flex; align-items: center;
+  min-height: 40px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-soft);
   border-radius: 999px;
-  padding: 9px 15px;
+  padding: 0 16px;
   font-size: 13.5px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
 }
 .chip:hover { border-color: var(--line-strong); background: var(--surface-sunk); }
 .chip:active { transform: translateY(1px); }
+
+/* ---- Button primitives --------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: 40px; padding: 0 var(--space-4);
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+.btn:hover { border-color: var(--line-strong); background: var(--surface-sunk); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn-primary { background: var(--coral); border-color: transparent; color: #fff; box-shadow: var(--shadow-soft); }
+.btn-primary:hover { background: var(--coral-press); border-color: transparent; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-soft); }
+.btn-ghost:hover { background: var(--surface-sunk); border-color: transparent; }
+
+/* Accessible focus ring for every interactive element (keyboard only). */
+a:focus-visible, button:focus-visible, input:focus-visible,
+textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
 
 /* ---- Messages ------------------------------------------------------------ */
 .msg { display: flex; gap: 12px; }
@@ -542,22 +591,216 @@ body {
 .msg-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
   font-size: 12px;
   color: var(--muted);
 }
+/* The model chip is the one emphasized element; click it to open "why". */
 .msg-meta .tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.msg-meta .tag.model { color: var(--text-soft); font-weight: 600; cursor: pointer; }
+.msg-meta .tag.model:hover { background: var(--surface-sunk); border-color: var(--border); }
+.msg-meta .tag.cost { font-variant-numeric: tabular-nums; }
+/* Compact status pills surfaced inline only when noteworthy. */
+.msg-meta .tag.status { background: var(--surface-sunk); border-color: var(--border); }
+.msg-meta .tag.status.accent { color: var(--coral-press); background: var(--coral-tint); border-color: transparent; }
+.msg-meta .tag.sim { color: var(--muted); background: var(--surface-sunk); border-color: var(--border); }
+
+/* Secondary actions (copy / regenerate / feedback) reveal on hover — keeps the
+   resting state calm. They stay keyboard-reachable (focus-within). */
+.msg-tools {
+  display: inline-flex; align-items: center; gap: 2px; margin-left: auto;
+  opacity: 0; transition: opacity 0.14s ease;
+}
+.msg.assistant:hover .msg-tools,
+.msg-tools:focus-within { opacity: 1; }
+/* Touch devices have no hover — always show the message tools, the edit action,
+   and the code-copy button so they're reachable by tap. */
+@media (hover: none) {
+  .msg-tools,
+  .user-actions,
+  .assistant-body .code-copy { opacity: 1; }
+}
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: none; border-radius: 8px; background: none; color: var(--muted);
+  cursor: pointer; transition: background 0.12s ease, color 0.12s ease;
+}
+.icon-btn:hover { background: var(--surface-sunk); color: var(--text); }
+.icon-btn.on { color: var(--coral-press); }
+.icon-btn.danger.on { color: var(--coral-press); }
+
+/* ---- Memory panel -------------------------------------------------------- */
+.memory-add { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+.memory-input {
+  flex: 1; min-width: 0; padding: 9px 11px;
+  font: inherit; font-size: 13px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); outline: none;
+  transition: border-color 0.12s ease;
+}
+.memory-input:focus { border-color: var(--line-strong); }
+.memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.memory-item {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  font-size: 13px; line-height: 1.45; color: var(--text-soft);
+}
+.memory-item > span { flex: 1; min-width: 0; }
+
+/* ---- Inline "why this model" expander ------------------------------------ */
+.why {
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   background: var(--surface-sunk);
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  animation: why-in 0.16s ease;
 }
-.msg-meta .tag.routed { color: var(--coral-press); background: var(--coral-tint); border-color: transparent; }
-.msg-meta .tag.sim { color: var(--muted); }
+.why-reason { margin: 0 0 var(--space-2); color: var(--text-soft); line-height: 1.5; }
+.why-confidence { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); font-size: 12px; color: var(--muted); }
+.why-conf-label { font-weight: 600; color: var(--text-soft); text-transform: capitalize; }
+.why-conf-bar { flex: 1; max-width: 140px; height: 5px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
+.why-conf-bar > span { display: block; height: 100%; background: var(--coral); }
+.why-conf-pct { font-variant-numeric: tabular-nums; }
+.why-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-2); }
+.why-stat {
+  font-size: 11.5px; color: var(--muted); text-transform: capitalize;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.why-more {
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--coral-press);
+  background: none; border: none; padding: 0; cursor: pointer;
+}
+.why-more:hover { text-decoration: underline; }
+
+/* ---- Motion as communication --------------------------------------------- */
+/* Tool steps fade in, staggered (delay set inline per index), so the agent's
+   work reads as a sequence rather than appearing all at once. */
+.tool-step { animation: step-in 0.22s ease both; }
+/* The escalation pill announces itself when a turn is bumped to a stronger model. */
+.msg-meta .tag.status.accent { animation: pill-in 0.2s ease both; }
+@keyframes why-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes step-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pill-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+
+/* ---- Billing cycle toggle (monthly / annual) ----------------------------- */
+.billing-cycle {
+  display: inline-flex; gap: 2px; margin: 0 auto var(--space-4);
+  padding: 3px; border-radius: 999px; background: var(--surface-sunk); border: 1px solid var(--border);
+}
+.cycle-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
+  background: none; border: none; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cycle-opt.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
+.cycle-save {
+  font-size: 10.5px; font-weight: 700; color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  padding: 1px 6px; border-radius: 999px;
+}
+.plan-annual-note { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+
+/* ---- Upgrade CTA in the out-of-budget bar -------------------------------- */
+.topup-upgrade {
+  font: inherit; font-size: 13px; font-weight: 600; color: #fff;
+  background: var(--coral); border: 1px solid transparent; border-radius: var(--radius-xs);
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.topup-upgrade:hover { background: var(--coral-press); }
+
+/* ---- Auto-recharge control (top-up section) ------------------------------ */
+.autorecharge { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.autorecharge-row { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.autorecharge-cfg { margin-top: var(--space-2); font-size: 13px; color: var(--muted); }
+.autorecharge-cfg select {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 3px 6px; margin: 0 2px;
+}
+
+/* ---- Native sponsored slot (free tier, empty state) ---------------------- */
+.sponsored {
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  max-width: 440px; margin-top: var(--space-2);
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong); background: var(--surface);
+  color: var(--text-soft); text-decoration: none; text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sponsored:hover { border-color: var(--coral); background: var(--surface-sunk); }
+.sponsored-tag {
+  flex: 0 0 auto; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint); border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px;
+}
+.sponsored-body { display: flex; flex-direction: column; gap: 1px; font-size: 13px; line-height: 1.4; }
+.sponsored-blurb { color: var(--muted); font-size: 12px; }
+.sponsored-arrow { flex: 0 0 auto; color: var(--faint); }
+
+/* ---- "You saved $X" value badge (header) --------------------------------- */
+.saved-badge {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600;
+  color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Anonymous trial (signed-out) --------------------------------------- */
+.trial-pill {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--coral-press); background: var(--coral-tint);
+  border: 1px solid color-mix(in srgb, var(--coral) 32%, transparent);
+  padding: 4px 10px; border-radius: 999px;
+}
+.auth-actions { display: inline-flex; align-items: center; gap: 8px; }
+.auth-signin-link {
+  background: none; border: none; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 600; color: var(--text-soft); padding: 6px 4px;
+}
+.auth-signin-link:hover { color: var(--text); }
+.auth-cta {
+  border: none; border-radius: var(--radius-sm); cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 700; color: #fff; background: var(--coral);
+  padding: 8px 14px; white-space: nowrap;
+}
+.auth-cta:hover { background: var(--coral-press); }
+.trial-bar {
+  width: 100%; max-width: 720px; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 6px 12px; margin: 8px 0 0; padding: 10px 14px;
+  background: var(--coral-tint); border: 1px solid var(--coral-press);
+  border-radius: var(--radius-sm);
+}
+.trial-bar-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.trial-bar-cta {
+  background: none; border: none; cursor: pointer; font: inherit;
+  font-size: 13.5px; font-weight: 700; color: var(--coral-press); padding: 0;
+}
+.trial-bar-cta:hover { text-decoration: underline; }
+
+/* ---- Composer hint (just-in-time keyboard tip) --------------------------- */
+.composer-hint { text-align: center; font-size: 11.5px; color: var(--faint); margin-top: var(--space-2); }
+.composer-hint kbd {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
+  background: var(--surface-sunk); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 5px;
+}
 
 /* ---- Agentic tool steps -------------------------------------------------- */
 .tool-steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
@@ -781,6 +1024,23 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
   overflow-x: hidden;
 }
 .panel-inner { padding: 20px 18px 32px; min-width: 372px; }
+
+/* ---- Side-panel tabs (Routing · Memory · Sandbox) ------------------------ */
+.panel-tabs {
+  display: flex; gap: 2px; padding: 12px 14px 0;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface);
+  min-width: 372px;
+}
+.panel-tab {
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
+  background: none; border: none; padding: 0 12px; min-height: 40px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.panel-tab:hover { color: var(--text-soft); }
+.panel-tab.active { color: var(--text); border-bottom-color: var(--coral); }
 .panel h2 {
   font-family: var(--font-serif);
   font-weight: 400;
@@ -934,6 +1194,9 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .bench-wrap h2 { font-size: 19px; margin: 40px 0 14px; }
 .bench-sub { color: var(--muted); font-size: 15.5px; line-height: 1.6; margin: 0 0 28px; }
 
+.bench-cta { display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap; margin: var(--space-1) 0 var(--space-2); }
+.bench-cta .bench-sub { margin: 0; }
+
 .bench-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .bench-card {
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
@@ -953,6 +1216,11 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .bench-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bench-table .mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }
 .bench-table tr.hl td { background: var(--coral-tint); font-weight: 600; }
+.bench-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  background: var(--surface-sunk); border: 1px solid var(--border); vertical-align: middle;
+}
 
 .bench-note { margin-top: 36px; border-left: 3px solid var(--line-strong); padding: 4px 0 4px 18px; }
 .bench-note h3 { font-size: 15px; margin: 0 0 10px; }
@@ -1037,6 +1305,36 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .auth-secondary:hover { background: var(--surface-sunk); }
 .auth-switch { background: none; border: none; color: var(--coral); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; padding: 6px; }
 .auth-back { background: none; border: none; color: var(--faint); font: inherit; font-size: 13.5px; cursor: pointer; padding: 4px; }
+
+/* Auth rendered as a modal overlay (trial wall / sign-in from the chat). */
+.auth-screen-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(3px);
+}
+.auth-screen-modal .auth-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  padding: 28px 26px;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.5);
+}
+.auth-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; cursor: pointer;
+  font-size: 24px; line-height: 1; color: var(--faint); padding: 2px 6px;
+}
+.auth-close:hover { color: var(--text); }
+.trial-receipt {
+  text-align: center;
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 26%, transparent);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+}
+.trial-receipt-title { font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.trial-receipt-body { font-size: 14px; line-height: 1.5; color: var(--text-soft); margin: 0; }
+.trial-receipt-body strong { color: var(--green); }
 
 .auth-demo {
   display: flex;

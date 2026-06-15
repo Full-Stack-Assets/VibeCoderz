@@ -48,7 +48,7 @@ const OPENAI_COMPATIBLE = {
  * model become live with one key. Otherwise, native per-provider: Anthropic uses
  * its tool_use protocol; OpenAI/xAI use tool_calls.
  */
-export function makeLiveToolPlanner({ modelId, system, messages, tools, maxTokens = 1024 }) {
+export function makeLiveToolPlanner({ modelId, system, messages, tools, maxTokens = 4096 }) {
   const model = getModel(modelId);
   if (!model) return null;
 
@@ -84,9 +84,9 @@ export function makeLiveToolPlanner({ modelId, system, messages, tools, maxToken
  * @param {string} o.system
  * @param {Array<{role,content}>} o.messages  initial conversation
  * @param {Array<{name,description,parameters}>} o.tools  tool schemas
- * @param {number} [o.maxTokens=1024]
+ * @param {number} [o.maxTokens=4096]
  */
-export function makeAnthropicToolPlanner({ modelId, system, messages, tools, maxTokens = 1024 }) {
+export function makeAnthropicToolPlanner({ modelId, system, messages, tools, maxTokens = 4096 }) {
   const model = getModel(modelId);
   const wire = wireId(model);
   const anthropicTools = tools.map((t) => ({
@@ -172,7 +172,7 @@ export function makeAnthropicToolPlanner({ modelId, system, messages, tools, max
  * reply with `role: 'tool'` messages keyed by tool_call_id. Emits one tool call
  * per loop iteration, queueing any extras from the same assistant turn.
  */
-export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseURL, apiKey, modelName, headers = {}, maxTokens = 1024 }) {
+export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseURL, apiKey, modelName, headers = {}, maxTokens = 4096 }) {
   const model = getModel(modelId);
   const wire = modelName || wireId(model);
   const openaiTools = tools.map((t) => ({
@@ -194,7 +194,12 @@ export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseUR
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...headers },
       body: JSON.stringify({
         model: wire,
-        max_tokens: maxTokens,
+        // OpenAI's GPT-5 family (incl. gpt-5.3-codex) rejects `max_tokens` on
+        // Chat Completions and requires `max_completion_tokens`; other providers
+        // (xAI, Google via gateway) still take `max_tokens`.
+        ...(model.provider === 'openai'
+          ? { max_completion_tokens: maxTokens }
+          : { max_tokens: maxTokens }),
         messages: convo,
         tools: openaiTools,
         tool_choice: 'auto',
@@ -232,8 +237,12 @@ export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseUR
     const msg = await callModel();
     const calls = msg.tool_calls || [];
     if (calls.length > 0) {
-      // The assistant turn (with tool_calls) must be in the transcript before its results.
-      convo.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
+      // The assistant turn (with tool_calls) must be in the transcript before its
+      // results. Use content:null (NOT '') when there's no text — an empty-string
+      // content alongside tool_calls breaks the gateway's OpenAI→Anthropic
+      // translation: the tool_use block is dropped, orphaning the next
+      // tool_result ("tool_result has no corresponding tool_use").
+      convo.push({ role: 'assistant', content: msg.content || null, tool_calls: calls });
       queue = calls;
       const call = queue.shift();
       awaiting = { id: call.id };

@@ -8,10 +8,10 @@
  * baselines — the "X% cheaper at Y% of the quality" claim, computed not asserted.
  */
 
-import { estimateTurnCostUSD, getModel } from '@conductor/coo-engine';
+import { estimateTurnCostUSD, getModel, MODEL_CATALOG } from '@conductor/coo-engine';
 import { DATASET } from './dataset.js';
 import { makeSyntheticOracle } from './oracle.js';
-import { defaultStrategies } from './strategies.js';
+import { defaultStrategies, alwaysStrategy } from './strategies.js';
 
 const round = (n, d = 6) => Number(n.toFixed(d));
 
@@ -113,4 +113,61 @@ export async function evaluate(opts = {}) {
   const byDomain = coo ? domainBreakdown(coo, premium) : [];
 
   return { oracle: oracle.name, n: dataset.length, strategies: results, headline, byDomain };
+}
+
+/**
+ * Per-MODEL leaderboard — the "which model should I actually use" view.
+ *
+ * Scores every catalog model as an always-pin strategy over the dataset, then
+ * ranks by quality-per-dollar (value) and surfaces the best model per task
+ * domain (both the highest raw quality and the best value). This is the public,
+ * shareable leaderboard the marketing page renders; it reuses the same dataset,
+ * oracle, and pricing as `evaluate()`, so the numbers are consistent.
+ */
+export async function evaluateModels(opts = {}) {
+  const dataset = opts.dataset || DATASET;
+  const oracle = opts.oracle || makeSyntheticOracle();
+
+  const scored = [];
+  for (const m of MODEL_CATALOG) {
+    const s = await scoreStrategy(m.label, alwaysStrategy(m.id), { dataset, oracle });
+    scored.push({
+      id: m.id,
+      label: m.label,
+      provider: m.provider,
+      capability: m.capability,
+      multimodal: !!m.multimodal,
+      avgQuality: s.avgQuality,
+      costPerTask: s.costPerTask,
+      qualityPerDollar: s.qualityPerDollar,
+      rows: s.rows,
+    });
+  }
+
+  const domains = [...new Set(dataset.map((t) => t.domain))];
+  const bestByDomain = domains.map((domain) => {
+    let bestQuality = null;
+    let bestValue = null;
+    for (const m of scored) {
+      const dr = m.rows.filter((r) => r.domain === domain);
+      if (!dr.length) continue;
+      const quality = avgBy(dr, 'quality');
+      const cost = avgBy(dr, 'cost');
+      const value = cost > 0 ? quality / cost : Infinity;
+      if (!bestQuality || quality > bestQuality.quality) {
+        bestQuality = { id: m.id, label: m.label, quality: round(quality, 4) };
+      }
+      if (!bestValue || value > bestValue.value) {
+        bestValue = { id: m.id, label: m.label, value: round(value, 2), costPerTask: round(cost) };
+      }
+    }
+    return { domain, tasks: dataset.filter((t) => t.domain === domain).length, bestQuality, bestValue };
+  });
+
+  // Strip the per-task rows from the public shape; rank by value (quality/$).
+  const models = scored
+    .map(({ rows: _rows, ...rest }) => rest)
+    .sort((a, b) => b.qualityPerDollar - a.qualityPerDollar);
+
+  return { n: dataset.length, models, bestByDomain };
 }

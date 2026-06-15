@@ -10,10 +10,12 @@
  */
 
 export { routeTurn, estimateTurnCostUSD } from './router.js';
-export { complete, simulate, gatewayConfig, messagesHaveImages, contentToText, toAnthropicContent, toOpenAIContent } from './llm.js';
+export { complete, simulate, gatewayConfig, messagesHaveImages, contentToText, toAnthropicContent, toOpenAIContent, costForModel } from './llm.js';
 export { makeAnthropicToolPlanner, makeOpenAIToolPlanner, makeLiveToolPlanner, canPlanLive } from './tool-planner.js';
-export { classifyTurn } from './classify.js';
+export { classifyTurn, detectSensitive } from './classify.js';
 export { MODEL_CATALOG, getModel, modelsAsAgents, visionModels } from './catalog.js';
+export { completeWithEscalation, judgeAnswer, topModelId, parseScore, defaultJudgeModelId } from './escalate.js';
+export { extractMemories, looksLikePreference, parseMemoryList } from './memory-extract.js';
 export {
   calculateFitnessScore,
   findBestAgentForTask,
