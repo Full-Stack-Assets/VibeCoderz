@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS users (
   saved_usd double precision NOT NULL DEFAULT 0,
   referral_code text,
   referred_by text,
+  auto_recharge_enabled boolean NOT NULL DEFAULT false,
+  auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0,
+  auto_recharge_pack_id text,
+  recharge_in_flight_at bigint,
   created_at bigint NOT NULL
 );
 -- Backfill columns on databases created before usage metering existed.
@@ -62,6 +66,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT
 ALTER TABLE users ADD COLUMN IF NOT EXISTS saved_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_pack_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recharge_in_flight_at bigint;
 CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code ON users (referral_code);
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
@@ -136,6 +144,9 @@ const mapUser = (r) =>
     savedUSD: Number(r.saved_usd) || 0,
     referralCode: r.referral_code || null,
     referredBy: r.referred_by || null,
+    autoRechargeEnabled: !!r.auto_recharge_enabled,
+    autoRechargeThresholdUSD: Number(r.auto_recharge_threshold_usd) || 0,
+    autoRechargePackId: r.auto_recharge_pack_id || null,
     createdAt: Number(r.created_at),
   };
 
@@ -501,5 +512,47 @@ export class PgStore {
       [userId, deltaUSD || 0]
     );
     return rows[0] ? Number(rows[0].saved_usd) : 0;
+  }
+
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+
+  async getAutoRecharge(userId) {
+    const { rows } = await this.q(
+      `SELECT auto_recharge_enabled, auto_recharge_threshold_usd, auto_recharge_pack_id, recharge_in_flight_at FROM users WHERE id = $1`,
+      [userId]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      enabled: !!r.auto_recharge_enabled,
+      thresholdUSD: Number(r.auto_recharge_threshold_usd) || 0,
+      packId: r.auto_recharge_pack_id || null,
+      inFlightAt: r.recharge_in_flight_at == null ? null : Number(r.recharge_in_flight_at),
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const sets = [];
+    const vals = [userId];
+    if (enabled !== undefined) { vals.push(!!enabled); sets.push(`auto_recharge_enabled = $${vals.length}`); }
+    if (thresholdUSD !== undefined) { vals.push(Math.max(0, Number(thresholdUSD) || 0)); sets.push(`auto_recharge_threshold_usd = $${vals.length}`); }
+    if (packId !== undefined) { vals.push(packId || null); sets.push(`auto_recharge_pack_id = $${vals.length}`); }
+    if (sets.length) await this.q(`UPDATE users SET ${sets.join(', ')} WHERE id = $1`, vals);
+    return this.getAutoRecharge(userId);
+  }
+
+  /** Atomic claim: set in-flight only if it's currently null or stale (>10 min). */
+  async claimRecharge(userId) {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const { rowCount } = await this.q(
+      `UPDATE users SET recharge_in_flight_at = $2
+       WHERE id = $1 AND (recharge_in_flight_at IS NULL OR recharge_in_flight_at < $3)`,
+      [userId, Date.now(), cutoff]
+    );
+    return rowCount > 0;
+  }
+
+  async clearRecharge(userId) {
+    await this.q(`UPDATE users SET recharge_in_flight_at = NULL WHERE id = $1`, [userId]);
   }
 }

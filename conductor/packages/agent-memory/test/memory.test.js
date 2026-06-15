@@ -98,6 +98,20 @@ test('referral codes are unique, resolvable, and recorded on the referee', async
   assert.equal(await store.getUserByReferralCode('nope'), null);
 })
 
+test('auto-recharge prefs persist and the recharge claim is single-shot + clearable', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 'ar@x.com', passwordHash: 'h' });
+  // Defaults: disabled.
+  assert.equal((await store.getAutoRecharge(u.id)).enabled, false);
+  const s = await store.setAutoRecharge(u.id, { enabled: true, thresholdUSD: 3, packId: 'p25' });
+  assert.deepEqual([s.enabled, s.thresholdUSD, s.packId], [true, 3, 'p25']);
+  // Atomic claim: first wins, a concurrent claim is refused until cleared.
+  assert.equal(await store.claimRecharge(u.id), true);
+  assert.equal(await store.claimRecharge(u.id), false, 'no double-charge while in flight');
+  await store.clearRecharge(u.id);
+  assert.equal(await store.claimRecharge(u.id), true, 'reclaimable after clear');
+})
+
 test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
   const store = new InMemoryStore();
   // First delivery claims it; a duplicate delivery is rejected (skip side effects).

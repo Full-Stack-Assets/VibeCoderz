@@ -66,6 +66,10 @@ model User {
   savedUSD           Float     @default(0) // lifetime routing savings vs always-premium
   referralCode       String?   @unique
   referredBy         String? // referrer's user id, if signed up via a referral
+  autoRechargeEnabled      Boolean @default(false)
+  autoRechargeThresholdUSD Float   @default(0)
+  autoRechargePackId       String?
+  rechargeInFlightAt       BigInt?
   createdAt          DateTime  @default(now())
   sessions           Session[]
 }

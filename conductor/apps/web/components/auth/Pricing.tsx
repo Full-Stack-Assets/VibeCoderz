@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { PLANS, TOPUP_PACKS, type PlanId } from '@/lib/auth'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { useAuth } from './AuthContext'
+import { AutoRechargeControl } from './AutoRechargeControl'
 
 export function Pricing({
   mode,
@@ -194,6 +195,7 @@ export function Pricing({
                 </button>
               ))}
             </div>
+            <AutoRechargeControl />
           </div>
         )}
 

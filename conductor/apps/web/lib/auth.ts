@@ -77,6 +77,8 @@ export interface User {
   savedUSD: number
   /** This user's referral code (share `/?ref=<code>` to give/get credit). */
   referralCode: string | null
+  /** Off-session auto-recharge preferences. */
+  autoRecharge: { enabled: boolean; thresholdUSD: number; packId: string | null }
 }
 
 /**

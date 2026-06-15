@@ -11,6 +11,7 @@ import {
 import type { RouteDecision } from '@/lib/types'
 import { currentUser } from '@/lib/server/session'
 import { chargeSplit, planLimits, sanitizeOverrides, usageStore } from '@/lib/server/plans'
+import { maybeAutoRecharge } from '@/lib/server/autorecharge'
 
 export const runtime = 'nodejs'
 
@@ -460,6 +461,13 @@ export async function POST(req: Request) {
         const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
         const newSpent = await meter.addUserUsage(user.id, fromPlan)
         const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
+        // Off-session auto-recharge when credit runs low (opt-in, default-off,
+        // best-effort — never blocks the turn).
+        try {
+          await maybeAutoRecharge(user, newCredit)
+        } catch {
+          /* auto-recharge is best-effort */
+        }
         // Accrue the lifetime "you saved $X vs premium" receipt (best-effort).
         let totalSavedUSD = user.savedUSD ?? 0
         if (savedUSD > 0) {

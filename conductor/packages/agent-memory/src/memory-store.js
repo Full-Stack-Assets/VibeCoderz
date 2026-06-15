@@ -206,6 +206,46 @@ export class InMemoryStore {
     return u.savedUSD;
   }
 
+  // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
+  // Stored flat on the user; a turn fires a charge only when the global flag is
+  // on AND the user opted in AND credit is low AND no recharge is in flight.
+
+  async getAutoRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    return {
+      enabled: !!u.autoRechargeEnabled,
+      thresholdUSD: u.autoRechargeThresholdUSD || 0,
+      packId: u.autoRechargePackId || null,
+      inFlightAt: u.rechargeInFlightAt || null,
+    };
+  }
+
+  async setAutoRecharge(userId, { enabled, thresholdUSD, packId } = {}) {
+    const u = this.users.get(userId);
+    if (!u) return null;
+    if (enabled !== undefined) u.autoRechargeEnabled = !!enabled;
+    if (thresholdUSD !== undefined) u.autoRechargeThresholdUSD = Math.max(0, Number(thresholdUSD) || 0);
+    if (packId !== undefined) u.autoRechargePackId = packId || null;
+    return this.getAutoRecharge(userId);
+  }
+
+  /** Atomically claim a recharge so concurrent low-credit turns don't double-charge.
+   *  A claim older than 10 min is treated as stale and re-claimable. */
+  async claimRecharge(userId) {
+    const u = this.users.get(userId);
+    if (!u) return false;
+    const now = Date.now();
+    if (u.rechargeInFlightAt && now - u.rechargeInFlightAt < 10 * 60 * 1000) return false;
+    u.rechargeInFlightAt = now;
+    return true;
+  }
+
+  async clearRecharge(userId) {
+    const u = this.users.get(userId);
+    if (u) u.rechargeInFlightAt = null;
+  }
+
   // --- Per-account conversation snapshots ---------------------------------
   // User-facing chat history, owned by an account and stored as an opaque
   // snapshot (the client's full conversation). Distinct from the runtime

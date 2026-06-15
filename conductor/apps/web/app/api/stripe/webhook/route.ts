@@ -63,6 +63,22 @@ export async function POST(req: Request) {
     } else if (event.type === 'customer.subscription.deleted') {
       const userId = meta.userId
       if (userId) await store.updateUser(userId, { plan: 'free', subscriptionStatus: 'canceled' })
+    } else if (event.type === 'payment_intent.succeeded' && meta.kind === 'auto-topup') {
+      // Off-session auto-recharge succeeded — grant the credit and clear the claim.
+      const userId = meta.userId
+      const creditUSD = Number(meta.creditUSD)
+      if (userId && creditUSD > 0) {
+        await store.addUserCredit(userId, creditUSD)
+        await store.clearRecharge(userId)
+      }
+    } else if (event.type === 'payment_intent.payment_failed' && meta.kind === 'auto-topup') {
+      // A failed off-session charge (decline / SCA): release the claim and turn
+      // auto-recharge off so we don't hammer a failing card.
+      const userId = meta.userId
+      if (userId) {
+        await store.clearRecharge(userId)
+        await store.setAutoRecharge(userId, { enabled: false })
+      }
     }
   } catch (err) {
     // A transient failure (e.g. the DB write) must NOT be acknowledged — release
