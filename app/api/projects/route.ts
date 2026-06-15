@@ -2,7 +2,7 @@ import { getDb, schema } from '@/db/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkBotId } from 'botid/server'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const db = await getDb()
     const projects = await db.query.projects.findMany({

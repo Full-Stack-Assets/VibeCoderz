@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   platform:
-    name: Platform (type-check · build)
+    name: Platform (type-check · lint · build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,8 @@ jobs:
       - name: Type-check
         run: pnpm type-check
 
-      # Note: `pnpm lint` is intentionally omitted — `next lint` was removed in
-      # Next 16 and the ESLint toolchain isn't wired up. Re-add a lint step once
-      # ESLint is installed and the script is migrated to the ESLint CLI.
+      - name: Lint
+        run: pnpm lint
 
       - name: Build
         run: pnpm build

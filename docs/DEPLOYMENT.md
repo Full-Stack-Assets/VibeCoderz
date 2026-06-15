@@ -200,17 +200,18 @@ estimates, and margin is keyed off the **gateway-billed** cost.
 
 ```
 PR opened ──▶ CI (ci.yml)              ──▶ Vercel Preview deploy
-              type-check · build            (preview env vars, preview DB)
+              type-check · lint · build     (preview env vars, preview DB)
               + conductor tests
 
 merge main ─▶ CI (ci.yml) ──▶ migrate prod DB ──▶ Vercel Production deploy
 ```
 
 - **`.github/workflows/ci.yml`** is the pre-merge quality gate: it installs with
-  a frozen lockfile, then runs `type-check` and `build` for the Platform, and
-  `pnpm test` for Conductor. The build runs with **no** real credentials to
-  prove the safe-by-default contract holds. (Lint is omitted until the ESLint
-  toolchain is migrated off the removed `next lint` command.)
+  a frozen lockfile, then runs `type-check`, `lint`, and `build` for the
+  Platform, and `pnpm test` for Conductor. The build runs with **no** real
+  credentials to prove the safe-by-default contract holds. Lint uses ESLint's
+  flat config (`eslint.config.mjs`) via the ESLint CLI — `next lint` was removed
+  in Next 16.
 - **Vercel Git integration** owns the actual deploys (preview per PR, production
   on `main`). CI gates the merge; Vercel ships the artifact.
 - **`.github/workflows/deploy-conductor-vercel.yml`** keeps Conductor's separate
