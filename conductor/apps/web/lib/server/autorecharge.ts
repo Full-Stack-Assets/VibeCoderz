@@ -9,6 +9,7 @@ export const AUTORECHARGE_ENABLED = (process.env.CONDUCTOR_AUTORECHARGE || 'off'
 
 interface RechargeStore {
   getAutoRecharge(userId: string): Promise<AutoRecharge | null>
+  setAutoRecharge(userId: string, patch: Partial<Omit<AutoRecharge, 'inFlightAt'>>): Promise<AutoRecharge | null>
   claimRecharge(userId: string): Promise<boolean>
   clearRecharge(userId: string): Promise<void>
 }
@@ -37,9 +38,16 @@ export async function maybeAutoRecharge(user: DBUser, creditBalanceUSD: number):
     })
     // Success → credit is granted by the webhook (payment_intent.succeeded).
   } catch {
-    // No card / decline / SCA-required → release the claim. The webhook's
-    // payment_intent.payment_failed handler disables auto-recharge for hard
-    // failures so we never hammer a failing card.
+    // A SYNCHRONOUS decline / SCA-required / no-card error throws here (Stripe
+    // raises card_error/authentication_required on the confirm call) and emits
+    // NO payment_intent.payment_failed webhook — so disabling it must happen
+    // here, not only in the webhook (which covers async failures). Release the
+    // claim AND turn auto-recharge off so we never re-hammer a failing card.
+    try {
+      await store.setAutoRecharge(user.id, { enabled: false })
+    } catch {
+      /* best-effort disable */
+    }
     await store.clearRecharge(user.id)
   }
 }

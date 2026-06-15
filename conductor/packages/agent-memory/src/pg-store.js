@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS users (
   saved_usd double precision NOT NULL DEFAULT 0,
   referral_code text,
   referred_by text,
+  referral_rewarded boolean NOT NULL DEFAULT false,
+  referral_rewards integer NOT NULL DEFAULT 0,
   auto_recharge_enabled boolean NOT NULL DEFAULT false,
   auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0,
   auto_recharge_pack_id text,
@@ -66,6 +68,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT
 ALTER TABLE users ADD COLUMN IF NOT EXISTS saved_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewards integer NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_enabled boolean NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_threshold_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_recharge_pack_id text;
@@ -408,6 +412,31 @@ export class PgStore {
   async getUserByReferralCode(code) {
     const { rows } = await this.q(`SELECT * FROM users WHERE referral_code = $1`, [String(code || '').trim()]);
     return mapUser(rows[0]) || null;
+  }
+
+  /**
+   * One-shot referral payout on the referee's FIRST paid action (signup grants
+   * are trivially farmable). Atomically flips the referee's one-shot flag and,
+   * if the referrer is still under the per-referrer cap, bumps their counter —
+   * returning the referrer id so the caller credits both sides. null otherwise.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    // Flip the referee's flag exactly once; capture who referred them.
+    const { rows } = await this.q(
+      `UPDATE users SET referral_rewarded = true
+       WHERE id = $1 AND referred_by IS NOT NULL AND referral_rewarded = false
+       RETURNING referred_by`,
+      [refereeId]
+    );
+    const referrerId = rows[0]?.referred_by;
+    if (!referrerId) return null;
+    // Pay out only while the referrer is under the cap (atomic guard).
+    const { rowCount } = await this.q(
+      `UPDATE users SET referral_rewards = referral_rewards + 1
+       WHERE id = $1 AND referral_rewards < $2`,
+      [referrerId, maxRewards]
+    );
+    return rowCount > 0 ? referrerId : null;
   }
 
   async getUserById(uid) {

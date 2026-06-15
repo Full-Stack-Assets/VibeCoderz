@@ -98,6 +98,27 @@ test('referral codes are unique, resolvable, and recorded on the referee', async
   assert.equal(await store.getUserByReferralCode('nope'), null);
 })
 
+test('referral reward is one-shot per referee, capped per referrer, and only for the referred', async () => {
+  const store = new InMemoryStore();
+  const ref = await store.createUser({ email: 'r@x.com', passwordHash: 'h' });
+  const a = await store.createUser({ email: 'a@x.com', passwordHash: 'h', referredBy: ref.id });
+
+  // First paid action pays out once, returning the referrer to credit.
+  assert.equal(await store.claimReferralReward(a.id), ref.id);
+  // A second paid action by the same referee never pays again (one-shot).
+  assert.equal(await store.claimReferralReward(a.id), null, 'no double payout per referee');
+
+  // A user who wasn't referred yields nothing.
+  const solo = await store.createUser({ email: 'solo@x.com', passwordHash: 'h' });
+  assert.equal(await store.claimReferralReward(solo.id), null);
+
+  // Per-referrer cap: with the referrer already at the cap, the referee is
+  // still consumed (one-shot) but no payout is returned.
+  const b = await store.createUser({ email: 'b@x.com', passwordHash: 'h', referredBy: ref.id });
+  assert.equal(await store.claimReferralReward(b.id, 1), null, 'cap blocks payout');
+  assert.equal(await store.claimReferralReward(b.id, 99), null, 'referee already consumed even when blocked');
+})
+
 test('auto-recharge prefs persist and the recharge claim is single-shot + clearable', async () => {
   const store = new InMemoryStore();
   const u = await store.createUser({ email: 'ar@x.com', passwordHash: 'h' });

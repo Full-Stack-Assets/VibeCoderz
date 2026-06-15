@@ -201,6 +201,26 @@ export class PrismaStore {
     return this.db.user.findUnique({ where: { referralCode: String(code || '').trim() } });
   }
 
+  /**
+   * One-shot referral payout on the referee's FIRST paid action. Atomically
+   * claims the referee's flag, then pays out only while the referrer is under
+   * the per-referrer cap; returns the referrer id once, else null.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = await this.db.user.findUnique({ where: { id: refereeId } });
+    if (!referee?.referredBy || referee.referralRewarded) return null;
+    const claimed = await this.db.user.updateMany({
+      where: { id: refereeId, referralRewarded: false },
+      data: { referralRewarded: true },
+    });
+    if (claimed.count === 0) return null; // a concurrent paid event already claimed it
+    const bumped = await this.db.user.updateMany({
+      where: { id: referee.referredBy, referralRewards: { lt: maxRewards } },
+      data: { referralRewards: { increment: 1 } },
+    });
+    return bumped.count > 0 ? referee.referredBy : null;
+  }
+
   // --- Auto-recharge (off-session top-up) — opt-in, default off ------------
   async getAutoRecharge(userId) {
     const u = await this.db.user.findUnique({ where: { id: userId } });

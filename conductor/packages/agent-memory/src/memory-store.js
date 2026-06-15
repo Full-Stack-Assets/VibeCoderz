@@ -125,6 +125,24 @@ export class InMemoryStore {
     return id ? this.users.get(id) : null;
   }
 
+  /**
+   * One-shot referral payout, claimed when a referee FIRST pays (not at signup,
+   * which is trivially farmable with throwaway accounts). Returns the referrer's
+   * id exactly once — when the referee was referred, hasn't been rewarded yet,
+   * AND the referrer is under the per-referrer cap — so the caller can credit
+   * both sides; null otherwise. The referee's flag is flipped first so repeated
+   * paid events reward at most once even if the cap blocks the payout.
+   */
+  async claimReferralReward(refereeId, maxRewards = 25) {
+    const referee = this.users.get(refereeId);
+    if (!referee || !referee.referredBy || referee.referralRewarded) return null;
+    referee.referralRewarded = true; // consume the referral regardless of outcome
+    const referrer = this.users.get(referee.referredBy);
+    if (!referrer || (referrer.referralRewards || 0) >= maxRewards) return null;
+    referrer.referralRewards = (referrer.referralRewards || 0) + 1;
+    return referrer.id;
+  }
+
   async getUserById(id) {
     return this.users.get(id) || null;
   }

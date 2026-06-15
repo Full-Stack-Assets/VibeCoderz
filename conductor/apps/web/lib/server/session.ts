@@ -43,6 +43,12 @@ export interface AuthStore {
   }): Promise<DBUser>
   getUserByEmail(email: string): Promise<DBUser | null>
   getUserByReferralCode(code: string): Promise<DBUser | null>
+  /**
+   * Claim a one-shot referral payout on the referee's first paid action.
+   * Returns the referrer's id once (referred, not yet rewarded, referrer under
+   * the cap) so the caller credits both sides; null otherwise.
+   */
+  claimReferralReward(refereeId: string, maxRewards?: number): Promise<string | null>
   getUserById(id: string): Promise<DBUser | null>
   updateUser(id: string, patch: Partial<DBUser>): Promise<DBUser | null>
   createSession(userId: string, token: string, expiresAt: number): Promise<unknown>

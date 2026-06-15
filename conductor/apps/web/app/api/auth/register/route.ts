@@ -7,8 +7,6 @@ export const runtime = 'nodejs'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // The owner account (you) is granted admin + the top plan automatically.
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'nsalbertson26@gmail.com').trim().toLowerCase()
-// Top-up credit granted to BOTH sides when a new account signs up via a referral.
-const REFERRAL_BONUS_USD = Number(process.env.REFERRAL_BONUS_USD) || 5
 
 export async function POST(req: Request) {
   // Throttle sign-ups per IP to blunt abuse/enumeration.
@@ -49,19 +47,10 @@ export async function POST(req: Request) {
   })
   await startSession(user.id)
 
-  // Give-$5-get-$5: credit both the new user and the referrer. Self-referral is
-  // impossible (the referee is brand new), and it's one-time by construction
-  // (only at signup). Best-effort — never block account creation.
-  if (referrer) {
-    try {
-      await Promise.all([
-        store.addUserCredit(user.id, REFERRAL_BONUS_USD),
-        store.addUserCredit(referrer.id, REFERRAL_BONUS_USD),
-      ])
-    } catch {
-      /* credit grant is best-effort */
-    }
-  }
+  // Give-$5-get-$5 is NOT granted here: paying out at signup is trivially farmed
+  // with throwaway accounts. The referee's `referredBy` is recorded above, and
+  // the payout fires on their FIRST paid action via the Stripe webhook
+  // (claimReferralReward), one-shot and capped per referrer.
 
   const fresh = (await store.getUserById(user.id)) ?? user
   return Response.json({ user: toPublicUser(fresh) })
