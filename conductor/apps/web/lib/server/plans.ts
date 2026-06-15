@@ -67,6 +67,9 @@ export interface UsageStore {
   getUserCredit(userId: string): Promise<number>
   /** Add (or, with a negative delta, consume) top-up credit; floors at 0. */
   addUserCredit(userId: string, deltaUSD: number): Promise<number>
+  /** Lifetime routing savings vs. always-premium (the value receipt). */
+  getUserSavings(userId: string): Promise<number>
+  addUserSavings(userId: string, deltaUSD: number): Promise<number>
 }
 
 export async function usageStore(): Promise<UsageStore> {

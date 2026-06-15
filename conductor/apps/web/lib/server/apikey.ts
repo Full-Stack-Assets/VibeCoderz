@@ -12,8 +12,11 @@ export interface ApiKeyStore {
   resolveApiKey(hash: string): Promise<{ id: string; userId: string } | null>
   listApiKeys(
     userId: string
-  ): Promise<Array<{ id: string; label: string; createdAt: number | Date; lastUsedAt: number | Date | null }>>
+  ): Promise<
+    Array<{ id: string; label: string; createdAt: number | Date; lastUsedAt: number | Date | null; requests: number; costUSD: number }>
+  >
   revokeApiKey(userId: string, keyId: string): Promise<boolean>
+  bumpApiKeyUsage(keyId: string, costUSD: number): Promise<void>
   getUserById(id: string): Promise<DBUser | null>
 }
 
@@ -40,12 +43,13 @@ export function keyFromRequest(req: Request): string | null {
   return x ? x.trim() : null
 }
 
-/** Resolve a request's API key to its owning user, or null. */
-export async function userFromApiKey(req: Request): Promise<DBUser | null> {
+/** Resolve a request's API key to its owning user + key id, or null. */
+export async function userFromApiKey(req: Request): Promise<{ user: DBUser; keyId: string } | null> {
   const key = keyFromRequest(req)
   if (!key) return null
   const store = await apiKeyStore()
   const rec = await store.resolveApiKey(hashKey(key))
   if (!rec) return null
-  return store.getUserById(rec.userId)
+  const user = await store.getUserById(rec.userId)
+  return user ? { user, keyId: rec.id } : null
 }

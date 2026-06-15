@@ -6,6 +6,11 @@ plan budget — the same server-enforced cap as the web app.
 
 ## Authentication
 
+API access is a **paid feature** — key creation requires a Pro or Max plan
+(`POST /api/keys` returns `402` on Free). Calls are **rate-limited per key**
+(Pro 60/min, Max 120/min; `429` + `Retry-After` when exceeded) and each key's
+request count + metered cost are tracked and returned by `GET /api/keys`.
+
 Create a key in the app (it's shown **once**), then pass it as a Bearer token:
 
 ```

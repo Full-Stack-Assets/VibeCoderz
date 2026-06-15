@@ -16,6 +16,9 @@ export interface DBUser {
   stripeCustomerId: string | null
   subscriptionStatus: string | null
   topupUSD: number
+  savedUSD?: number
+  referralCode?: string | null
+  referredBy?: string | null
   createdAt: number | Date
 }
 
@@ -26,8 +29,10 @@ export interface AuthStore {
     passwordHash: string
     plan?: PlanId
     role?: 'user' | 'admin'
+    referredBy?: string | null
   }): Promise<DBUser>
   getUserByEmail(email: string): Promise<DBUser | null>
+  getUserByReferralCode(code: string): Promise<DBUser | null>
   getUserById(id: string): Promise<DBUser | null>
   updateUser(id: string, patch: Partial<DBUser>): Promise<DBUser | null>
   createSession(userId: string, token: string, expiresAt: number): Promise<unknown>
@@ -39,6 +44,9 @@ export interface AuthStore {
   markEventProcessed(eventId: string): Promise<boolean>
   /** Release an event claim so a failed handler can be retried. */
   releaseEvent(eventId: string): Promise<void>
+  /** Lifetime routing savings vs. always-premium (the value receipt). */
+  getUserSavings(userId: string): Promise<number>
+  addUserSavings(userId: string, deltaUSD: number): Promise<number>
 }
 
 export async function authStore(): Promise<AuthStore> {
@@ -53,6 +61,8 @@ export interface PublicUser {
   role: 'user' | 'admin'
   subscriptionStatus: string | null
   topupUSD: number
+  savedUSD: number
+  referralCode: string | null
 }
 
 export function toPublicUser(u: DBUser): PublicUser {
@@ -64,6 +74,8 @@ export function toPublicUser(u: DBUser): PublicUser {
     role: u.role,
     subscriptionStatus: u.subscriptionStatus,
     topupUSD: u.topupUSD ?? 0,
+    savedUSD: u.savedUSD ?? 0,
+    referralCode: u.referralCode ?? null,
   }
 }
 

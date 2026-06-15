@@ -17,6 +17,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await currentUser(req)
   if (!user) return new Response('Please sign in.', { status: 401 })
+  // API access is a paid feature — gate key creation to Pro/Max.
+  if (user.plan === 'free') {
+    return Response.json({ error: 'API access is a paid feature. Upgrade to Pro or Max to create keys.' }, { status: 402 })
+  }
   let body: { label?: string } = {}
   try {
     body = (await req.json()) as { label?: string }

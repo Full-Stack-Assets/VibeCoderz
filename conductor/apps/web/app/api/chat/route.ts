@@ -1,4 +1,4 @@
-import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD, extractMemories, looksLikePreference } from '@conductor/coo-engine'
+import { routeTurn, complete, completeWithEscalation, makeLiveToolPlanner, getModel, judgeAnswer, topModelId, defaultJudgeModelId, estimateTurnCostUSD, costForModel, extractMemories, looksLikePreference } from '@conductor/coo-engine'
 import { getStore } from '@conductor/agent-memory'
 import {
   ToolRegistry,
@@ -382,6 +382,9 @@ export async function POST(req: Request) {
         let costUSD = 0
         let simReason: string | null = null
         let escalation: Record<string, unknown> | null = null
+        // What this turn would have cost on the premium model minus what it
+        // actually cost — the "you saved $X vs always-premium" receipt.
+        let savedUSD = 0
 
         if (body.agentic) {
           const out = await runAgentic(
@@ -408,6 +411,13 @@ export async function POST(req: Request) {
           costUSD = Number(cost.toFixed(6))
           escalation = enrichEscalation(out.escalation)
           if (escalation) send('escalation', { escalation })
+          // Savings vs premium: same step count priced at the premium model.
+          if (!simulated) {
+            const premium = getModel(topModelId())
+            const totalSteps = out.firstSteps + (out.escalation?.escalated ? out.secondSteps : 0)
+            const premiumCost = premium ? estimateTurnCostUSD(premium, lastUser(messages).length) * (totalSteps + 1) : costUSD
+            savedUSD = Math.max(0, Number((premiumCost - costUSD).toFixed(6)))
+          }
         } else {
           const opts = { system: systemPrompt, messages: engineMessages, maxTokens: MAX_OUTPUT_TOKENS }
           const result = (await (ESCALATE_ENABLED
@@ -418,6 +428,7 @@ export async function POST(req: Request) {
             simulated: boolean
             simReason?: string | null
             escalation?: Record<string, unknown>
+            usage?: { input_tokens?: number; output_tokens?: number }
           }
           fullText = result.text
           simulated = result.simulated
@@ -425,6 +436,10 @@ export async function POST(req: Request) {
           costUSD = result.costUSD
           escalation = enrichEscalation(result.escalation ?? null)
           if (escalation) send('escalation', { escalation })
+          // Savings vs premium: same token usage priced at the premium model.
+          if (!simulated) {
+            savedUSD = Math.max(0, Number((costForModel(topModelId(), result.usage ?? {}) - costUSD).toFixed(6)))
+          }
         }
 
         // Surface why a turn simulated despite a configured key — the cause
@@ -445,6 +460,15 @@ export async function POST(req: Request) {
         const { fromPlan, fromTopup } = chargeSplit(planBudgetUSD, spentUSD, costUSD)
         const newSpent = await meter.addUserUsage(user.id, fromPlan)
         const newCredit = fromTopup > 0 ? await meter.addUserCredit(user.id, -fromTopup) : topupUSD
+        // Accrue the lifetime "you saved $X vs premium" receipt (best-effort).
+        let totalSavedUSD = user.savedUSD ?? 0
+        if (savedUSD > 0) {
+          try {
+            totalSavedUSD = await meter.addUserSavings(user.id, savedUSD)
+          } catch {
+            /* savings is a best-effort stat — never block a turn */
+          }
+        }
         const persisted = await persist(body.conversationId, lastUser(messages), fullText, {
           model: decision.model.id,
           score: decision.score,
@@ -455,9 +479,12 @@ export async function POST(req: Request) {
           // Routing-quality signal for the measured-advantage flywheel (Phase 1):
           // the judged quality and whether we had to escalate, per turn.
           escalation,
+          savedUSD,
         })
         send('done', {
           costUSD,
+          savedUSD,
+          savedTotalUSD: Number(totalSavedUSD.toFixed(4)),
           simulated,
           simReason,
           escalation,

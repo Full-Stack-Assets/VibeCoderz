@@ -115,6 +115,15 @@ function meter(model, usage) {
   return Number(((input / 1e6) * p.input + (output / 1e6) * p.output).toFixed(6));
 }
 
+/**
+ * What a given catalog model WOULD cost for the same token usage — used to
+ * compute "you saved $X vs always-premium" against the model the router picked.
+ */
+export function costForModel(modelId, usage) {
+  const model = getModel(modelId);
+  return model ? meter(model, usage) : 0;
+}
+
 // Map a catalog id (e.g. "anthropic/claude-opus-4.8") to the provider's wire id.
 function wireModelId(model) {
   const id = model.id.includes('/') ? model.id.split('/').slice(1).join('/') : model.id;

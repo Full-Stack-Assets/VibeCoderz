@@ -70,6 +70,7 @@ export function Chat() {
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
   const [accountOpen, setAccountOpen] = useState(false)
+  const [refCopied, setRefCopied] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [routingOpen, setRoutingOpen] = useState(false)
   const [preferModel, setPreferModel] = useState<string | null>(null)
@@ -85,6 +86,7 @@ export function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
   const [credit, setCredit] = useState(0)
+  const [savedUSD, setSavedUSD] = useState(0)
   const [decision, setDecision] = useState<RouteDecision | null>(null)
   const [audit, setAudit] = useState<AuditItem[]>([])
   const [dark, setDark] = useState(false)
@@ -115,6 +117,7 @@ export function Chat() {
   // Keep the live credit balance in sync with the account (updated again after
   // each turn via the stream's `done` event, and after returning from Stripe).
   useEffect(() => setCredit(user?.topupUSD ?? 0), [user?.topupUSD])
+  useEffect(() => setSavedUSD(user?.savedUSD ?? 0), [user?.savedUSD])
   // Re-deal the starter prompts when the rotation window rolls over, so even a
   // tab left open gets fresh suggestions (a minutely index check, no re-render
   // unless the window actually changed).
@@ -338,6 +341,7 @@ export function Chat() {
             }))
             setSpent(data.spentUSD as number)
             if (typeof data.topupUSD === 'number') setCredit(data.topupUSD as number)
+            if (typeof data.savedTotalUSD === 'number') setSavedUSD(data.savedTotalUSD as number)
             if (data.capReached) setCapReached(true)
           } else if (event === 'error') {
             patch(pendingId, (m) => ({ ...m, pending: false, error: true, content: `⚠️ ${data.error}` }))
@@ -594,6 +598,14 @@ export function Chat() {
               />
             )}
           </div>
+          {savedUSD >= 0.01 && (
+            <span
+              className="saved-badge"
+              title={`Routing has saved you about $${savedUSD.toFixed(2)} vs. always using the premium model.`}
+            >
+              saved ${savedUSD < 100 ? savedUSD.toFixed(2) : Math.round(savedUSD)}
+            </span>
+          )}
           <a
             className="bench-link"
             href="/benchmark"
@@ -651,6 +663,24 @@ export function Chat() {
                   >
                     Manage plan
                   </button>
+                  {user?.referralCode && (
+                    <button
+                      className="account-item"
+                      title="Share your link — you both get $5 of routing credit"
+                      onClick={() => {
+                        const link = `${window.location.origin}/?ref=${user.referralCode}`
+                        navigator.clipboard
+                          ?.writeText(link)
+                          .then(() => {
+                            setRefCopied(true)
+                            setTimeout(() => setRefCopied(false), 1600)
+                          })
+                          .catch(() => {})
+                      }}
+                    >
+                      {refCopied ? 'Referral link copied ✓' : 'Refer & earn — give $5, get $5'}
+                    </button>
+                  )}
                   <button
                     className="account-item danger"
                     onClick={async () => {
@@ -804,7 +834,7 @@ export function Chat() {
                 <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
               </div>
               {capReached && billing.enabled && (
-                <div className="topup-bar" role="region" aria-label="Add routing credit">
+                <div className="topup-bar" role="region" aria-label="Out of budget">
                   <span className="topup-label">Out of budget — add credit to keep going:</span>
                   <div className="topup-packs">
                     {TOPUP_PACKS.map((p) => (
@@ -821,6 +851,11 @@ export function Chat() {
                       </button>
                     ))}
                   </div>
+                  {user?.plan !== 'max' && (
+                    <button type="button" className="topup-upgrade" onClick={() => setPlanOpen(true)}>
+                      Upgrade for a bigger budget →
+                    </button>
+                  )}
                 </div>
               )}
               {budgetCap && (

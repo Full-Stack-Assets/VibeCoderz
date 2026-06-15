@@ -696,6 +696,44 @@ textarea:focus-visible, [tabindex]:focus-visible {
 @keyframes step-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes pill-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
 
+/* ---- Billing cycle toggle (monthly / annual) ----------------------------- */
+.billing-cycle {
+  display: inline-flex; gap: 2px; margin: 0 auto var(--space-4);
+  padding: 3px; border-radius: 999px; background: var(--surface-sunk); border: 1px solid var(--border);
+}
+.cycle-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
+  background: none; border: none; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cycle-opt.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
+.cycle-save {
+  font-size: 10.5px; font-weight: 700; color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  padding: 1px 6px; border-radius: 999px;
+}
+.plan-annual-note { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+
+/* ---- Upgrade CTA in the out-of-budget bar -------------------------------- */
+.topup-upgrade {
+  font: inherit; font-size: 13px; font-weight: 600; color: #fff;
+  background: var(--coral); border: 1px solid transparent; border-radius: var(--radius-xs);
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.topup-upgrade:hover { background: var(--coral-press); }
+
+/* ---- "You saved $X" value badge (header) --------------------------------- */
+.saved-badge {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600;
+  color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Composer hint (just-in-time keyboard tip) --------------------------- */
 .composer-hint { text-align: center; font-size: 11.5px; color: var(--faint); margin-top: var(--space-2); }
 .composer-hint kbd {

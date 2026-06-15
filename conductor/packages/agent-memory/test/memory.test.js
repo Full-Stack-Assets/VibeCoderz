@@ -65,6 +65,39 @@ test('api keys: create stores only a hash, resolve finds the owner, list hides t
   assert.equal(await store.resolveApiKey('hash_aaa'), null);
 });
 
+test('user savings accrue cumulatively and floor at zero', async () => {
+  const store = new InMemoryStore();
+  const u = await store.createUser({ email: 's@x.com', passwordHash: 'h' });
+  assert.equal(await store.getUserSavings(u.id), 0);
+  assert.equal(await store.addUserSavings(u.id, 0.0123), 0.0123);
+  const total = await store.addUserSavings(u.id, 0.05);
+  assert.ok(Math.abs(total - 0.0623) < 1e-9, 'savings sum');
+  assert.equal(await store.getUserSavings(u.id), total);
+  // Unknown user → 0, no throw.
+  assert.equal(await store.getUserSavings('nope'), 0);
+})
+
+test('api key usage counters accrue and surface in the listing', async () => {
+  const store = new InMemoryStore();
+  const k = await store.createApiKey('u1', 'ci', 'hash_k');
+  await store.bumpApiKeyUsage(k.id, 0.01);
+  await store.bumpApiKeyUsage(k.id, 0.02);
+  const [listed] = await store.listApiKeys('u1');
+  assert.equal(listed.requests, 2);
+  assert.ok(Math.abs(listed.costUSD - 0.03) < 1e-9, 'cost accrues');
+})
+
+test('referral codes are unique, resolvable, and recorded on the referee', async () => {
+  const store = new InMemoryStore();
+  const ref = await store.createUser({ email: 'ref@x.com', passwordHash: 'h' });
+  assert.ok(ref.referralCode && ref.referralCode.length >= 6);
+  assert.equal((await store.getUserByReferralCode(ref.referralCode)).id, ref.id);
+  const referee = await store.createUser({ email: 'new@x.com', passwordHash: 'h', referredBy: ref.id });
+  assert.equal(referee.referredBy, ref.id);
+  assert.notEqual(referee.referralCode, ref.referralCode);
+  assert.equal(await store.getUserByReferralCode('nope'), null);
+})
+
 test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
   const store = new InMemoryStore();
   // First delivery claims it; a duplicate delivery is rejected (skip side effects).
