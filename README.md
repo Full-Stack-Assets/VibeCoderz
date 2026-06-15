@@ -42,8 +42,21 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Deploy
 
-Click the deploy button above or run:
+The platform deploys to Vercel via Git integration — preview per PR, production
+on merge to `main`. It builds and boots with **zero credentials** (anonymous,
+unmetered mode) and switches on auth, billing, live models, and real sandboxes
+as their environment variables appear.
 
-```bash
-vc deploy
-```
+See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** for the full deployment design:
+topology, environments, the database/migration strategy, the secrets matrix,
+CI/CD, health checks, security hardening, and the release runbook.
+
+Quick paths:
+
+- **One-click:** the *Deploy with Vercel* button above.
+- **Dashboard:** import the repo as a Vercel project (Root Directory = repo
+  root; Next.js auto-detected) and set environment variables per
+  `docs/DEPLOYMENT.md` §5.
+- **Health check:** `GET /api/health` reports DB connectivity and which
+  subsystems are configured — use it for uptime monitoring and post-deploy
+  smoke tests.
