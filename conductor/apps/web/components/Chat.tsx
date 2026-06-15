@@ -80,6 +80,7 @@ export function Chat() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [panelTab, setPanelTab] = useState<'routing' | 'memory' | 'sandbox'>('routing')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [spent, setSpent] = useState(0)
   const [credit, setCredit] = useState(0)
@@ -691,7 +692,10 @@ export function Chat() {
                   <Message
                     key={m.id}
                     msg={m}
-                    onInspect={() => setPanelOpen(true)}
+                    onInspect={() => {
+                      setPanelTab('routing')
+                      setPanelOpen(true)
+                    }}
                     onEdit={m.role === 'user' && !sending ? editResend : undefined}
                     onRegenerate={
                       m.role === 'assistant' && i === messages.length - 1 && !sending && !m.pending
@@ -828,9 +832,24 @@ export function Chat() {
           </div>
 
           <aside className={`panel ${panelOpen ? 'show' : ''}`}>
-            <OrchestrationPanel decision={decision} audit={audit} />
-            <MemoryPanel />
-            <Sandbox />
+            <div className="panel-tabs" role="tablist" aria-label="Side panel">
+              {(['routing', 'memory', 'sandbox'] as const).map((t) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={panelTab === t}
+                  className={`panel-tab ${panelTab === t ? 'active' : ''}`}
+                  onClick={() => setPanelTab(t)}
+                >
+                  {t === 'routing' ? 'Routing' : t === 'memory' ? 'Memory' : 'Sandbox'}
+                </button>
+              ))}
+            </div>
+            <div className="panel-body">
+              {panelTab === 'routing' && <OrchestrationPanel decision={decision} audit={audit} />}
+              {panelTab === 'memory' && <MemoryPanel />}
+              {panelTab === 'sandbox' && <Sandbox />}
+            </div>
           </aside>
           {panelOpen && <div className="scrim" onClick={() => setPanelOpen(false)} />}
         </div>

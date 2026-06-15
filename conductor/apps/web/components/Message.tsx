@@ -89,6 +89,7 @@ export function Message({
   const bodyRef = useCodeCopyButtons([msg.content, msg.pending])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [whyOpen, setWhyOpen] = useState(false)
 
   if (msg.role === 'user') {
     if (editing) {
@@ -198,7 +199,11 @@ export function Message({
                   const hasChart =
                     s.result.ok && s.tool === 'analyze_data' && (!!s.result.stats || !!s.result.columns?.length)
                   return (
-                    <div className={`tool-step ${s.result.ok ? '' : 'err'}`} key={i}>
+                    <div
+                      className={`tool-step ${s.result.ok ? '' : 'err'}`}
+                      key={i}
+                      style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+                    >
                       <div className="tool-step-h">
                         <span className="tool-badge">{s.tool}</span>
                         <code>{arg}</code>
@@ -234,19 +239,21 @@ export function Message({
           </>
         )}
         {msg.decision?.model && !msg.pending && (
+          <>
           <div className="msg-meta">
-            {/* Primary: the routed model (click → full "why" in the panel) + cost.
-                One emphasized element; the rationale lives behind it. */}
+            {/* Primary: the routed model. Click to expand a one-line "why" inline;
+                the full dimension breakdown is one more click away. */}
             <span
               className="tag model"
-              title={`${msg.decision.reason} — click for the full routing breakdown`}
+              title="Why this model?"
               role="button"
               tabIndex={0}
-              onClick={onInspect}
+              aria-expanded={whyOpen}
+              onClick={() => setWhyOpen((v) => !v)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  onInspect?.()
+                  setWhyOpen((v) => !v)
                 }
               }}
             >
@@ -309,6 +316,25 @@ export function Message({
               )}
             </span>
           </div>
+          {whyOpen && (
+            <div className="why">
+              <p className="why-reason">{msg.decision.reason}</p>
+              <div className="why-stats">
+                {msg.decision.classification?.domain && (
+                  <span className="why-stat">{msg.decision.classification.domain}</span>
+                )}
+                <span className="why-stat">fit {(msg.decision.score * 100).toFixed(0)}%</span>
+                {msg.decision.fallback && <span className="why-stat">fallback</span>}
+                {msg.decision.overridden && <span className="why-stat">manual override</span>}
+              </div>
+              {onInspect && (
+                <button className="why-more" onClick={onInspect}>
+                  Full breakdown →
+                </button>
+              )}
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>
