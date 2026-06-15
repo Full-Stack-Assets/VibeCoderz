@@ -14,6 +14,17 @@ test('verifyWebhook accepts a correct signature and rejects tampering', () => {
   assert.ok(!verifyWebhook(payload, null, secret), 'missing header rejected')
 })
 
+test('verifyWebhook rejects a stale (replayed) timestamp outside tolerance', () => {
+  const secret = 'whsec_test'
+  const payload = JSON.stringify({ id: 'evt_old', type: 'checkout.session.completed' })
+  const t = Math.floor(Date.now() / 1000) - 3600 // 1 hour old
+  const sig = createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex')
+  // Signature is valid, but the timestamp is well outside the default window.
+  assert.ok(!verifyWebhook(payload, `t=${t},v1=${sig}`, secret), 'stale event rejected')
+  // A generous tolerance accepts it again (signature still valid).
+  assert.ok(verifyWebhook(payload, `t=${t},v1=${sig}`, secret, 7200), 'within wider tolerance accepted')
+})
+
 test('plan/price mapping is driven by env', () => {
   process.env.STRIPE_PRICE_PRO = 'price_pro'
   process.env.STRIPE_PRICE_MAX = 'price_max'

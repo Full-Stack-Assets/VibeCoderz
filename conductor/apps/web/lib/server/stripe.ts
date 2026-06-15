@@ -115,8 +115,16 @@ export async function createPortalSession(opts: { customerId: string; returnUrl:
   return { url: session.url }
 }
 
-/** Verify a Stripe webhook signature (the `Stripe-Signature` header). */
-export function verifyWebhook(payload: string, signatureHeader: string | null, secret: string): boolean {
+/**
+ * Verify a Stripe webhook signature (the `Stripe-Signature` header), rejecting
+ * stale/replayed events outside `toleranceSec` (Stripe's default is 5 minutes).
+ */
+export function verifyWebhook(
+  payload: string,
+  signatureHeader: string | null,
+  secret: string,
+  toleranceSec = 300
+): boolean {
   if (!signatureHeader || !secret) return false
   const parts = Object.fromEntries(
     signatureHeader.split(',').map((kv) => {
@@ -127,6 +135,9 @@ export function verifyWebhook(payload: string, signatureHeader: string | null, s
   const t = parts['t']
   const v1 = parts['v1']
   if (!t || !v1) return false
+  // Replay guard: the signed timestamp must be within the tolerance window.
+  const ts = Number(t)
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > toleranceSec) return false
   const expected = createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex')
   try {
     const a = Buffer.from(expected)

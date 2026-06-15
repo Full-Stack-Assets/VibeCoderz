@@ -35,6 +35,10 @@ export interface AuthStore {
   deleteSession(token: string): Promise<unknown>
   /** Grant top-up routing credit (e.g. from a completed Stripe payment). */
   addUserCredit(userId: string, deltaUSD: number): Promise<number>
+  /** Atomically claim a webhook event id; false if already processed. */
+  markEventProcessed(eventId: string): Promise<boolean>
+  /** Release an event claim so a failed handler can be retried. */
+  releaseEvent(eventId: string): Promise<void>
 }
 
 export async function authStore(): Promise<AuthStore> {

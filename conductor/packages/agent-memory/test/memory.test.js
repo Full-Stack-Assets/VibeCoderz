@@ -65,6 +65,18 @@ test('api keys: create stores only a hash, resolve finds the owner, list hides t
   assert.equal(await store.resolveApiKey('hash_aaa'), null);
 });
 
+test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
+  const store = new InMemoryStore();
+  // First delivery claims it; a duplicate delivery is rejected (skip side effects).
+  assert.equal(await store.markEventProcessed('evt_1'), true);
+  assert.equal(await store.markEventProcessed('evt_1'), false, 'duplicate is not re-claimed');
+  // Releasing (after a failed handler) lets a retry re-claim it.
+  await store.releaseEvent('evt_1');
+  assert.equal(await store.markEventProcessed('evt_1'), true, 'retry re-claims after release');
+  // Distinct events are independent.
+  assert.equal(await store.markEventProcessed('evt_2'), true);
+})
+
 test('recordFeedback merges a quality label into the message meta', async () => {
   const store = new InMemoryStore();
   const conv = await store.createConversation();

@@ -21,6 +21,21 @@ export class InMemoryStore {
     this.sessions = new Map(); // token -> { token, userId, expiresAt }
     this.memories = new Map(); // userId -> [{ id, text, createdAt }] durable prefs
     this.apiKeys = new Map(); // keyId -> { id, userId, label, hash, createdAt, lastUsedAt }
+    this.processedEvents = new Set(); // webhook event ids already handled (idempotency)
+  }
+
+  // --- Webhook idempotency -------------------------------------------------
+  // Atomically claim a webhook event id. Returns true if newly claimed, false
+  // if it was already processed (a duplicate/replayed delivery to skip).
+  async markEventProcessed(eventId) {
+    if (this.processedEvents.has(eventId)) return false;
+    this.processedEvents.add(eventId);
+    return true;
+  }
+
+  /** Release a claim so a failed handler can be retried by the provider. */
+  async releaseEvent(eventId) {
+    this.processedEvents.delete(eventId);
   }
 
   // --- API keys (public API auth) -----------------------------------------
