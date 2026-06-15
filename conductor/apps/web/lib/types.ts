@@ -15,7 +15,16 @@ export interface RouteDecision {
   overridden: boolean
   optimizerChoice: string | null
   candidates: { id: string; label: string; score: number; typeMatch: boolean }[]
-  classification: { type: string; domain?: string; complexity: number; minQuality: number; requiresVision?: boolean }
+  classification: {
+    type: string
+    domain?: string
+    complexity: number
+    minQuality: number
+    requiresVision?: boolean
+    /** High-stakes category ('medical' | 'legal' | 'financial' | 'crisis') that raised a safety floor. */
+    sensitive?: string | null
+    safetyFloor?: number
+  }
   estCostUSD: number
   budget: { budgetUSD: number; spentUSD: number; utilization: number; throttled: boolean }
   reason: string

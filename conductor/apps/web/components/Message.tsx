@@ -236,6 +236,14 @@ export function Message({
             {msg.decision.classification?.domain && (
               <span className="tag domain">{msg.decision.classification.domain}</span>
             )}
+            {msg.decision.classification?.sensitive && (
+              <span
+                className="tag routed"
+                title={`High-stakes (${msg.decision.classification.sensitive}) — held to a higher-capability model for safety.`}
+              >
+                🛡 {msg.decision.classification.sensitive}
+              </span>
+            )}
             <span className="tag">fit {(msg.decision.score * 100).toFixed(0)}%</span>
             <span className="tag">${(msg.costUSD ?? 0).toFixed(5)}</span>
             {msg.escalation?.escalated && (
