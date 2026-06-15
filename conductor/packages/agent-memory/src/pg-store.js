@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS user_memories (
   created_at bigint NOT NULL
 );
 CREATE INDEX IF NOT EXISTS user_memories_user ON user_memories (user_id, created_at);
+CREATE TABLE IF NOT EXISTS api_keys (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label text NOT NULL DEFAULT 'API key',
+  hash text NOT NULL UNIQUE,
+  created_at bigint NOT NULL,
+  last_used_at bigint
+);
+CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys (hash);
 `;
 
 const mapUser = (r) =>
@@ -200,6 +209,43 @@ export class PgStore {
       [conversationId]
     );
     return rows;
+  }
+
+  // --- API keys (public API auth) -----------------------------------------
+
+  async createApiKey(userId, label, hash) {
+    const kid = id('ak');
+    const now = Date.now();
+    await this.q(
+      `INSERT INTO api_keys (id, user_id, label, hash, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      [kid, userId, label || 'API key', hash, now]
+    );
+    return { id: kid, label: label || 'API key', createdAt: now };
+  }
+
+  async resolveApiKey(hash) {
+    const { rows } = await this.q(`SELECT id, user_id FROM api_keys WHERE hash = $1`, [hash]);
+    if (!rows[0]) return null;
+    await this.q(`UPDATE api_keys SET last_used_at = $2 WHERE id = $1`, [rows[0].id, Date.now()]);
+    return { id: rows[0].id, userId: rows[0].user_id };
+  }
+
+  async listApiKeys(userId) {
+    const { rows } = await this.q(
+      `SELECT id, label, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId]
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      label: r.label,
+      createdAt: Number(r.created_at),
+      lastUsedAt: r.last_used_at == null ? null : Number(r.last_used_at),
+    }));
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const { rowCount } = await this.q(`DELETE FROM api_keys WHERE id = $1 AND user_id = $2`, [keyId, userId]);
+    return rowCount > 0;
   }
 
   // --- Durable per-user memory (personalization) --------------------------

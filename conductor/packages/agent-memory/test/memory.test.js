@@ -41,6 +41,30 @@ test('per-user memories: add, list (scoped per user), and delete', async () => {
   assert.equal(await store.deleteMemory('user_b', a.id), false);
 });
 
+test('api keys: create stores only a hash, resolve finds the owner, list hides the secret, revoke is scoped', async () => {
+  const store = new InMemoryStore();
+  const rec = await store.createApiKey('user_a', 'CI key', 'hash_aaa');
+  assert.ok(rec.id && rec.label === 'CI key');
+  assert.equal(rec.hash, undefined, 'create never returns the hash/secret');
+
+  // Resolve by hash → owner; an unknown hash → null.
+  const resolved = await store.resolveApiKey('hash_aaa');
+  assert.equal(resolved.userId, 'user_a');
+  assert.equal(await store.resolveApiKey('nope'), null);
+
+  // List is scoped and carries no secret material.
+  await store.createApiKey('user_b', 'other', 'hash_bbb');
+  const list = await store.listApiKeys('user_a');
+  assert.equal(list.length, 1);
+  assert.equal(list[0].hash, undefined);
+  assert.ok('lastUsedAt' in list[0]);
+
+  // Revoke only works for the owner.
+  assert.equal(await store.revokeApiKey('user_b', rec.id), false, "can't revoke another user's key");
+  assert.equal(await store.revokeApiKey('user_a', rec.id), true);
+  assert.equal(await store.resolveApiKey('hash_aaa'), null);
+});
+
 test('recordFeedback merges a quality label into the message meta', async () => {
   const store = new InMemoryStore();
   const conv = await store.createConversation();

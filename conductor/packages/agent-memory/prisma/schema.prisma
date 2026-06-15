@@ -86,3 +86,15 @@ model UserMemory {
 
   @@index([userId, createdAt])
 }
+
+// API keys for the public API. Only the SHA-256 hash is stored.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  label      String    @default("API key")
+  hash       String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}

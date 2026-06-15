@@ -20,6 +20,42 @@ export class InMemoryStore {
     this.usersByEmail = new Map(); // lowercased email -> id
     this.sessions = new Map(); // token -> { token, userId, expiresAt }
     this.memories = new Map(); // userId -> [{ id, text, createdAt }] durable prefs
+    this.apiKeys = new Map(); // keyId -> { id, userId, label, hash, createdAt, lastUsedAt }
+  }
+
+  // --- API keys (public API auth) -----------------------------------------
+  // Only the SHA-256 hash of a key is stored; the plaintext is shown once at
+  // creation and never persisted.
+
+  async createApiKey(userId, label, hash) {
+    const rec = { id: nextId('ak'), userId, label: label || 'API key', hash, createdAt: Date.now(), lastUsedAt: null };
+    this.apiKeys.set(rec.id, rec);
+    return { id: rec.id, label: rec.label, createdAt: rec.createdAt };
+  }
+
+  /** Resolve a key hash to its owner; bumps lastUsedAt. */
+  async resolveApiKey(hash) {
+    for (const rec of this.apiKeys.values()) {
+      if (rec.hash === hash) {
+        rec.lastUsedAt = Date.now();
+        return { id: rec.id, userId: rec.userId };
+      }
+    }
+    return null;
+  }
+
+  async listApiKeys(userId) {
+    return [...this.apiKeys.values()]
+      .filter((r) => r.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((r) => ({ id: r.id, label: r.label, createdAt: r.createdAt, lastUsedAt: r.lastUsedAt }));
+  }
+
+  async revokeApiKey(userId, keyId) {
+    const rec = this.apiKeys.get(keyId);
+    if (!rec || rec.userId !== userId) return false;
+    this.apiKeys.delete(keyId);
+    return true;
   }
 
   // --- Accounts & sessions (email + password auth) ------------------------
