@@ -1,5 +1,6 @@
 import { authStore, startSession, toPublicUser } from '@/lib/server/session'
 import { hashPassword, passwordProblem } from '@/lib/server/password'
+import { rateLimit, clientIp, tooManyRequests } from '@/lib/server/ratelimit'
 
 export const runtime = 'nodejs'
 
@@ -8,6 +9,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'nsalbertson26@gmail.com').trim().toLowerCase()
 
 export async function POST(req: Request) {
+  // Throttle sign-ups per IP to blunt abuse/enumeration.
+  const rl = rateLimit(`register:${clientIp(req)}`, 5, 10 * 60 * 1000)
+  if (!rl.ok) return tooManyRequests(rl.retryAfterSec)
+
   let body: { email?: string; name?: string; password?: string }
   try {
     body = await req.json()

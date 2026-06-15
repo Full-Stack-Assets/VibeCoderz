@@ -1,5 +1,6 @@
 import { authStore, startSession, toPublicUser } from '@/lib/server/session'
 import { verifyPassword } from '@/lib/server/password'
+import { rateLimit, clientIp, tooManyRequests } from '@/lib/server/ratelimit'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,15 @@ export async function POST(req: Request) {
   }
   const email = String(body.email ?? '').trim().toLowerCase()
   const password = String(body.password ?? '')
+
+  // Throttle by IP and by target email to blunt credential stuffing / brute force.
+  const ip = clientIp(req)
+  const byIp = rateLimit(`login:ip:${ip}`, 10, 10 * 60 * 1000)
+  if (!byIp.ok) return tooManyRequests(byIp.retryAfterSec)
+  if (email) {
+    const byEmail = rateLimit(`login:email:${email}`, 5, 10 * 60 * 1000)
+    if (!byEmail.ok) return tooManyRequests(byEmail.retryAfterSec)
+  }
 
   const store = await authStore()
   const user = await store.getUserByEmail(email)
