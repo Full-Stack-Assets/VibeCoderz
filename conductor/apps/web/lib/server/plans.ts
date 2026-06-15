@@ -4,8 +4,9 @@ import type { PlanId } from './session'
 /**
  * Server-authoritative plan limits. These — not the client — decide the spend
  * budget, the spend period, and whether a user may override the router's model
- * choice. Amounts mirror the marketing copy in lib/auth.ts (Free $1/day, Pro
- * $25/mo, Max $150/mo); tune here, in one place.
+ * choice. NOTE: `budgetUSD` is the per-period MODEL-SPEND ceiling (the margin
+ * cap), NOT the subscription price — subscription prices live in lib/auth.ts
+ * PLANS. Current caps: Free $0.20/day, Pro $10/mo, Max $50/mo. Tune here.
  */
 export interface PlanLimits {
   budgetUSD: number
