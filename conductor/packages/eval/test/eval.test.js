@@ -6,13 +6,14 @@ import {
   syntheticQuality,
   makeSyntheticOracle,
   evaluate,
+  evaluateModels,
   defaultStrategies,
   renderReport,
   cooStrategy,
   qualityOracleStrategy,
   classifyTransportError,
 } from '../src/index.js';
-import { getModel } from '@conductor/coo-engine';
+import { getModel, MODEL_CATALOG } from '@conductor/coo-engine';
 
 test('dataset is well-formed and covers every domain', () => {
   const domains = new Set();
@@ -97,6 +98,31 @@ test('per-domain breakdown covers every domain and holds quality everywhere', as
   for (const d of r.byDomain) {
     assert.ok(d.retentionPct >= 90, `${d.domain} retention ${d.retentionPct}% >= 90%`);
     assert.ok(d.tasks > 0 && d.models.length > 0);
+  }
+});
+
+test('model leaderboard: ranks every catalog model by value, with best-per-domain picks', async () => {
+  const r = await evaluateModels();
+  // Every catalog model appears exactly once.
+  assert.equal(r.models.length, MODEL_CATALOG.length);
+  assert.equal(new Set(r.models.map((m) => m.id)).size, MODEL_CATALOG.length);
+  // Each row carries the public fields and no per-task rows leak through.
+  for (const m of r.models) {
+    assert.ok(m.id && m.label && typeof m.avgQuality === 'number');
+    assert.ok(m.costPerTask >= 0 && m.qualityPerDollar >= 0);
+    assert.equal(m.rows, undefined, 'per-task rows are stripped from the public shape');
+  }
+  // Sorted by quality-per-dollar, descending (the value leaderboard).
+  for (let i = 1; i < r.models.length; i++) {
+    assert.ok(r.models[i - 1].qualityPerDollar >= r.models[i].qualityPerDollar, 'ranked by value desc');
+  }
+  // Best-per-domain covers every domain with both a quality and a value pick.
+  const domains = new Set(r.bestByDomain.map((d) => d.domain));
+  for (const d of ['coding', 'reasoning', 'writing', 'analysis', 'research', 'data', 'vision']) {
+    assert.ok(domains.has(d), `leaderboard covers ${d}`);
+  }
+  for (const d of r.bestByDomain) {
+    assert.ok(d.bestQuality?.id && d.bestValue?.id, `${d.domain} has both picks`);
   }
 });
 

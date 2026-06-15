@@ -761,6 +761,39 @@ textarea:focus-visible, [tabindex]:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- Anonymous trial (signed-out) --------------------------------------- */
+.trial-pill {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--coral-press); background: var(--coral-tint);
+  border: 1px solid color-mix(in srgb, var(--coral) 32%, transparent);
+  padding: 4px 10px; border-radius: 999px;
+}
+.auth-actions { display: inline-flex; align-items: center; gap: 8px; }
+.auth-signin-link {
+  background: none; border: none; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 600; color: var(--text-soft); padding: 6px 4px;
+}
+.auth-signin-link:hover { color: var(--text); }
+.auth-cta {
+  border: none; border-radius: var(--radius-sm); cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 700; color: #fff; background: var(--coral);
+  padding: 8px 14px; white-space: nowrap;
+}
+.auth-cta:hover { background: var(--coral-press); }
+.trial-bar {
+  width: 100%; max-width: 720px; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 6px 12px; margin: 8px 0 0; padding: 10px 14px;
+  background: var(--coral-tint); border: 1px solid var(--coral-press);
+  border-radius: var(--radius-sm);
+}
+.trial-bar-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.trial-bar-cta {
+  background: none; border: none; cursor: pointer; font: inherit;
+  font-size: 13.5px; font-weight: 700; color: var(--coral-press); padding: 0;
+}
+.trial-bar-cta:hover { text-decoration: underline; }
+
 /* ---- Composer hint (just-in-time keyboard tip) --------------------------- */
 .composer-hint { text-align: center; font-size: 11.5px; color: var(--faint); margin-top: var(--space-2); }
 .composer-hint kbd {
@@ -1183,6 +1216,11 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .bench-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bench-table .mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }
 .bench-table tr.hl td { background: var(--coral-tint); font-weight: 600; }
+.bench-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  background: var(--surface-sunk); border: 1px solid var(--border); vertical-align: middle;
+}
 
 .bench-note { margin-top: 36px; border-left: 3px solid var(--line-strong); padding: 4px 0 4px 18px; }
 .bench-note h3 { font-size: 15px; margin: 0 0 10px; }
@@ -1267,6 +1305,36 @@ a.citation-link:hover { border-color: var(--coral); background: var(--coral-tint
 .auth-secondary:hover { background: var(--surface-sunk); }
 .auth-switch { background: none; border: none; color: var(--coral); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; padding: 6px; }
 .auth-back { background: none; border: none; color: var(--faint); font: inherit; font-size: 13.5px; cursor: pointer; padding: 4px; }
+
+/* Auth rendered as a modal overlay (trial wall / sign-in from the chat). */
+.auth-screen-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(3px);
+}
+.auth-screen-modal .auth-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  padding: 28px 26px;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.5);
+}
+.auth-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; cursor: pointer;
+  font-size: 24px; line-height: 1; color: var(--faint); padding: 2px 6px;
+}
+.auth-close:hover { color: var(--text); }
+.trial-receipt {
+  text-align: center;
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 26%, transparent);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+}
+.trial-receipt-title { font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.trial-receipt-body { font-size: 14px; line-height: 1.5; color: var(--text-soft); margin: 0; }
+.trial-receipt-body strong { color: var(--green); }
 
 .auth-demo {
   display: flex;

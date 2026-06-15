@@ -12,6 +12,8 @@ const buckets = new Map<string, number[]>()
 export interface RateLimitResult {
   ok: boolean
   retryAfterSec: number
+  /** Calls still allowed in the current window (0 when the limit is hit). */
+  remaining: number
 }
 
 /** Record a hit for `key`; allow up to `limit` within `windowMs`. */
@@ -22,11 +24,11 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateLim
   if (hits.length >= limit) {
     buckets.set(key, hits)
     const retryAfterSec = Math.max(1, Math.ceil((hits[0] + windowMs - now) / 1000))
-    return { ok: false, retryAfterSec }
+    return { ok: false, retryAfterSec, remaining: 0 }
   }
   hits.push(now)
   buckets.set(key, hits)
-  return { ok: true, retryAfterSec: 0 }
+  return { ok: true, retryAfterSec: 0, remaining: Math.max(0, limit - hits.length) }
 }
 
 /** Best-effort client IP from proxy headers (Vercel sets x-forwarded-for). */
