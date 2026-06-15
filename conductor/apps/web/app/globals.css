@@ -624,6 +624,13 @@ textarea:focus-visible, [tabindex]:focus-visible {
 }
 .msg.assistant:hover .msg-tools,
 .msg-tools:focus-within { opacity: 1; }
+/* Touch devices have no hover — always show the message tools, the edit action,
+   and the code-copy button so they're reachable by tap. */
+@media (hover: none) {
+  .msg-tools,
+  .user-actions,
+  .assistant-body .code-copy { opacity: 1; }
+}
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0;
