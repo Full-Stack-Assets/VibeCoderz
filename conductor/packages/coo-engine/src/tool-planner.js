@@ -237,8 +237,12 @@ export function makeOpenAIToolPlanner({ modelId, system, messages, tools, baseUR
     const msg = await callModel();
     const calls = msg.tool_calls || [];
     if (calls.length > 0) {
-      // The assistant turn (with tool_calls) must be in the transcript before its results.
-      convo.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
+      // The assistant turn (with tool_calls) must be in the transcript before its
+      // results. Use content:null (NOT '') when there's no text — an empty-string
+      // content alongside tool_calls breaks the gateway's OpenAI→Anthropic
+      // translation: the tool_use block is dropped, orphaning the next
+      // tool_result ("tool_result has no corresponding tool_use").
+      convo.push({ role: 'assistant', content: msg.content || null, tool_calls: calls });
       queue = calls;
       const call = queue.shift();
       awaiting = { id: call.id };
