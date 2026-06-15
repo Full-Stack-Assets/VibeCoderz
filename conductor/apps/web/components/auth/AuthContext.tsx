@@ -77,7 +77,10 @@ export function AuthProviderComponent({ children }: { children: ReactNode }) {
   }, [refresh])
 
   const register = useCallback(async (email: string, password: string, name: string) => {
-    const res = await postJSON('/api/auth/register', { email, password, name })
+    // Capture a referral code from the landing URL (?ref=CODE), if present.
+    const referralCode =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') || undefined : undefined
+    const res = await postJSON('/api/auth/register', { email, password, name, referralCode })
     if (!res.ok) throw new Error(await readError(res, 'Could not create your account.'))
     const { user } = (await res.json()) as { user: User }
     setUser(user)

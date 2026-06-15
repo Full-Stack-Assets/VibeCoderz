@@ -70,6 +70,7 @@ export function Chat() {
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
   const [accountOpen, setAccountOpen] = useState(false)
+  const [refCopied, setRefCopied] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [routingOpen, setRoutingOpen] = useState(false)
   const [preferModel, setPreferModel] = useState<string | null>(null)
@@ -662,6 +663,24 @@ export function Chat() {
                   >
                     Manage plan
                   </button>
+                  {user?.referralCode && (
+                    <button
+                      className="account-item"
+                      title="Share your link — you both get $5 of routing credit"
+                      onClick={() => {
+                        const link = `${window.location.origin}/?ref=${user.referralCode}`
+                        navigator.clipboard
+                          ?.writeText(link)
+                          .then(() => {
+                            setRefCopied(true)
+                            setTimeout(() => setRefCopied(false), 1600)
+                          })
+                          .catch(() => {})
+                      }}
+                    >
+                      {refCopied ? 'Referral link copied ✓' : 'Refer & earn — give $5, get $5'}
+                    </button>
+                  )}
                   <button
                     className="account-item danger"
                     onClick={async () => {

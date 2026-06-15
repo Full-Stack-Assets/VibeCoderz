@@ -1,9 +1,13 @@
 import { routeTurn, complete, completeWithEscalation } from '@conductor/coo-engine'
-import { userFromApiKey } from '@/lib/server/apikey'
+import { userFromApiKey, apiKeyStore } from '@/lib/server/apikey'
 import { planLimits, usageStore, chargeSplit, sanitizeOverrides } from '@/lib/server/plans'
+import { rateLimit } from '@/lib/server/ratelimit'
 import type { RouteDecision } from '@/lib/types'
 
 export const runtime = 'nodejs'
+
+// Per-key requests/minute by plan — abuse protection + the basis for tiering.
+const RATE_PER_MIN: Record<string, number> = { pro: 60, max: 120 }
 
 const SYSTEM =
   'You are Conductor, a general-purpose assistant routed by a constraint-optimized ' +
@@ -29,8 +33,18 @@ const err = (error: string, status: number) => Response.json({ error }, { status
  * by default), meters against the key owner's plan budget, and returns JSON.
  */
 export async function POST(req: Request) {
-  const user = await userFromApiKey(req)
-  if (!user) return err('invalid or missing API key', 401)
+  const auth = await userFromApiKey(req)
+  if (!auth) return err('invalid or missing API key', 401)
+  const { user, keyId } = auth
+
+  // Per-key rate limit (by plan). 429 + Retry-After when exceeded.
+  const rl = rateLimit(`apikey:${keyId}`, RATE_PER_MIN[user.plan] ?? 60, 60_000)
+  if (!rl.ok) {
+    return new Response(JSON.stringify({ error: 'rate limit exceeded' }), {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': String(rl.retryAfterSec) },
+    })
+  }
 
   let body: Body
   try {
@@ -77,6 +91,12 @@ export async function POST(req: Request) {
   const { fromPlan, fromTopup } = chargeSplit(lim.budgetUSD, spentUSD, result.costUSD || 0)
   await meter.addUserUsage(user.id, fromPlan)
   if (fromTopup > 0) await meter.addUserCredit(user.id, -fromTopup)
+  // Per-key usage (requests + cost) for the developer dashboard / future tiering.
+  try {
+    await (await apiKeyStore()).bumpApiKeyUsage(keyId, result.costUSD || 0)
+  } catch {
+    /* usage accounting is best-effort */
+  }
 
   return Response.json({
     text: result.text,

@@ -8,6 +8,8 @@
  * dependency or database present.
  */
 
+import { randomUUID } from 'node:crypto';
+
 export class PrismaStore {
   /** @param {import('@prisma/client').PrismaClient} client */
   constructor(client) {
@@ -88,8 +90,14 @@ export class PrismaStore {
     return this.db.apiKey.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, label: true, createdAt: true, lastUsedAt: true },
+      select: { id: true, label: true, createdAt: true, lastUsedAt: true, requests: true, costUSD: true },
     });
+  }
+
+  async bumpApiKeyUsage(keyId, costUSD) {
+    await this.db.apiKey
+      .update({ where: { id: keyId }, data: { requests: { increment: 1 }, costUSD: { increment: costUSD || 0 } } })
+      .catch(() => {});
   }
 
   async revokeApiKey(userId, keyId) {
@@ -178,14 +186,19 @@ export class PrismaStore {
 
   // --- Accounts & sessions ------------------------------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
+    const referralCode = randomUUID().replace(/-/g, '').slice(0, 8);
     return this.db.user.create({
-      data: { email: String(email).trim(), name: name || null, passwordHash, plan, role },
+      data: { email: String(email).trim(), name: name || null, passwordHash, plan, role, referralCode, referredBy: referredBy || null },
     });
   }
 
   async getUserByEmail(email) {
     return this.db.user.findUnique({ where: { email: String(email).trim() } });
+  }
+
+  async getUserByReferralCode(code) {
+    return this.db.user.findUnique({ where: { referralCode: String(code || '').trim() } });
   }
 
   async getUserById(id) {

@@ -77,6 +77,27 @@ test('user savings accrue cumulatively and floor at zero', async () => {
   assert.equal(await store.getUserSavings('nope'), 0);
 })
 
+test('api key usage counters accrue and surface in the listing', async () => {
+  const store = new InMemoryStore();
+  const k = await store.createApiKey('u1', 'ci', 'hash_k');
+  await store.bumpApiKeyUsage(k.id, 0.01);
+  await store.bumpApiKeyUsage(k.id, 0.02);
+  const [listed] = await store.listApiKeys('u1');
+  assert.equal(listed.requests, 2);
+  assert.ok(Math.abs(listed.costUSD - 0.03) < 1e-9, 'cost accrues');
+})
+
+test('referral codes are unique, resolvable, and recorded on the referee', async () => {
+  const store = new InMemoryStore();
+  const ref = await store.createUser({ email: 'ref@x.com', passwordHash: 'h' });
+  assert.ok(ref.referralCode && ref.referralCode.length >= 6);
+  assert.equal((await store.getUserByReferralCode(ref.referralCode)).id, ref.id);
+  const referee = await store.createUser({ email: 'new@x.com', passwordHash: 'h', referredBy: ref.id });
+  assert.equal(referee.referredBy, ref.id);
+  assert.notEqual(referee.referralCode, ref.referralCode);
+  assert.equal(await store.getUserByReferralCode('nope'), null);
+})
+
 test('webhook idempotency: an event is claimed once, releasable for retry', async () => {
   const store = new InMemoryStore();
   // First delivery claims it; a duplicate delivery is rejected (skip side effects).

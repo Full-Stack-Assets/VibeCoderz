@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS users (
   spend_period_start bigint NOT NULL DEFAULT 0,
   topup_credit_usd double precision NOT NULL DEFAULT 0,
   saved_usd double precision NOT NULL DEFAULT 0,
+  referral_code text,
+  referred_by text,
   created_at bigint NOT NULL
 );
 -- Backfill columns on databases created before usage metering existed.
@@ -58,6 +60,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS spent_usd double precision NOT NULL D
 ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_period_start bigint NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS topup_credit_usd double precision NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS saved_usd double precision NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code ON users (referral_code);
 CREATE TABLE IF NOT EXISTS sessions (
   token text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -104,9 +109,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
   label text NOT NULL DEFAULT 'API key',
   hash text NOT NULL UNIQUE,
   created_at bigint NOT NULL,
-  last_used_at bigint
+  last_used_at bigint,
+  requests bigint NOT NULL DEFAULT 0,
+  cost_usd double precision NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys (hash);
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS requests bigint NOT NULL DEFAULT 0;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS cost_usd double precision NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS processed_events (
   id text PRIMARY KEY,
   created_at bigint NOT NULL
@@ -125,6 +134,8 @@ const mapUser = (r) =>
     subscriptionStatus: r.subscription_status,
     topupUSD: Number(r.topup_credit_usd) || 0,
     savedUSD: Number(r.saved_usd) || 0,
+    referralCode: r.referral_code || null,
+    referredBy: r.referred_by || null,
     createdAt: Number(r.created_at),
   };
 
@@ -253,7 +264,7 @@ export class PgStore {
 
   async listApiKeys(userId) {
     const { rows } = await this.q(
-      `SELECT id, label, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
+      `SELECT id, label, created_at, last_used_at, requests, cost_usd FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
       [userId]
     );
     return rows.map((r) => ({
@@ -261,7 +272,16 @@ export class PgStore {
       label: r.label,
       createdAt: Number(r.created_at),
       lastUsedAt: r.last_used_at == null ? null : Number(r.last_used_at),
+      requests: Number(r.requests) || 0,
+      costUSD: Number(r.cost_usd) || 0,
     }));
+  }
+
+  async bumpApiKeyUsage(keyId, costUSD) {
+    await this.q(
+      `UPDATE api_keys SET requests = requests + 1, cost_usd = cost_usd + $2 WHERE id = $1`,
+      [keyId, costUSD || 0]
+    );
   }
 
   async revokeApiKey(userId, keyId) {
@@ -356,13 +376,14 @@ export class PgStore {
 
   // --- Accounts & sessions ------------------------------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
     const uid = id('user');
+    const referralCode = randomUUID().replace(/-/g, '').slice(0, 8);
     const { rows } = await this.q(
-      `INSERT INTO users (id, email, name, password_hash, plan, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (id, email, name, password_hash, plan, role, referral_code, referred_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (email) DO NOTHING RETURNING *`,
-      [uid, String(email).trim(), name || null, passwordHash, plan, role, Date.now()]
+      [uid, String(email).trim(), name || null, passwordHash, plan, role, referralCode, referredBy || null, Date.now()]
     );
     if (rows.length === 0) throw new Error('An account with that email already exists.');
     return mapUser(rows[0]);
@@ -370,6 +391,11 @@ export class PgStore {
 
   async getUserByEmail(email) {
     const { rows } = await this.q(`SELECT * FROM users WHERE email = $1`, [String(email).trim()]);
+    return mapUser(rows[0]) || null;
+  }
+
+  async getUserByReferralCode(code) {
+    const { rows } = await this.q(`SELECT * FROM users WHERE referral_code = $1`, [String(code || '').trim()]);
     return mapUser(rows[0]) || null;
   }
 

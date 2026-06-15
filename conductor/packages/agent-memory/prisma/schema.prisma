@@ -64,6 +64,8 @@ model User {
   stripeCustomerId   String?
   subscriptionStatus String? // Stripe subscription status, e.g. 'active'
   savedUSD           Float     @default(0) // lifetime routing savings vs always-premium
+  referralCode       String?   @unique
+  referredBy         String? // referrer's user id, if signed up via a referral
   createdAt          DateTime  @default(now())
   sessions           Session[]
 }
@@ -102,6 +104,8 @@ model ApiKey {
   hash       String    @unique
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
+  requests   Int       @default(0)
+  costUSD    Float     @default(0)
 
   @@index([userId])
 }

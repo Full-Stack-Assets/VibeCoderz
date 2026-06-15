@@ -17,6 +17,8 @@ export interface DBUser {
   subscriptionStatus: string | null
   topupUSD: number
   savedUSD?: number
+  referralCode?: string | null
+  referredBy?: string | null
   createdAt: number | Date
 }
 
@@ -27,8 +29,10 @@ export interface AuthStore {
     passwordHash: string
     plan?: PlanId
     role?: 'user' | 'admin'
+    referredBy?: string | null
   }): Promise<DBUser>
   getUserByEmail(email: string): Promise<DBUser | null>
+  getUserByReferralCode(code: string): Promise<DBUser | null>
   getUserById(id: string): Promise<DBUser | null>
   updateUser(id: string, patch: Partial<DBUser>): Promise<DBUser | null>
   createSession(userId: string, token: string, expiresAt: number): Promise<unknown>
@@ -58,6 +62,7 @@ export interface PublicUser {
   subscriptionStatus: string | null
   topupUSD: number
   savedUSD: number
+  referralCode: string | null
 }
 
 export function toPublicUser(u: DBUser): PublicUser {
@@ -70,6 +75,7 @@ export function toPublicUser(u: DBUser): PublicUser {
     subscriptionStatus: u.subscriptionStatus,
     topupUSD: u.topupUSD ?? 0,
     savedUSD: u.savedUSD ?? 0,
+    referralCode: u.referralCode ?? null,
   }
 }
 

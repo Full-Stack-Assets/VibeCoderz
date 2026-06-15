@@ -75,6 +75,8 @@ export interface User {
   topupUSD: number
   /** Lifetime routing savings vs. always-premium (USD) — the value receipt. */
   savedUSD: number
+  /** This user's referral code (share `/?ref=<code>` to give/get credit). */
+  referralCode: string | null
 }
 
 /**

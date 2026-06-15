@@ -18,6 +18,7 @@ export class InMemoryStore {
     this.owned = new Map(); // id -> { id, ownerId, title, updatedAt, snapshot }
     this.users = new Map(); // id -> User
     this.usersByEmail = new Map(); // lowercased email -> id
+    this.usersByReferralCode = new Map(); // referral code -> id
     this.sessions = new Map(); // token -> { token, userId, expiresAt }
     this.memories = new Map(); // userId -> [{ id, text, createdAt }] durable prefs
     this.apiKeys = new Map(); // keyId -> { id, userId, label, hash, createdAt, lastUsedAt }
@@ -43,9 +44,17 @@ export class InMemoryStore {
   // creation and never persisted.
 
   async createApiKey(userId, label, hash) {
-    const rec = { id: nextId('ak'), userId, label: label || 'API key', hash, createdAt: Date.now(), lastUsedAt: null };
+    const rec = { id: nextId('ak'), userId, label: label || 'API key', hash, createdAt: Date.now(), lastUsedAt: null, requests: 0, costUSD: 0 };
     this.apiKeys.set(rec.id, rec);
     return { id: rec.id, label: rec.label, createdAt: rec.createdAt };
+  }
+
+  /** Record one API call against a key (request count + metered cost). */
+  async bumpApiKeyUsage(keyId, costUSD) {
+    const rec = this.apiKeys.get(keyId);
+    if (!rec) return;
+    rec.requests = (rec.requests || 0) + 1;
+    rec.costUSD = (rec.costUSD || 0) + (costUSD || 0);
   }
 
   /** Resolve a key hash to its owner; bumps lastUsedAt. */
@@ -63,7 +72,7 @@ export class InMemoryStore {
     return [...this.apiKeys.values()]
       .filter((r) => r.userId === userId)
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map((r) => ({ id: r.id, label: r.label, createdAt: r.createdAt, lastUsedAt: r.lastUsedAt }));
+      .map((r) => ({ id: r.id, label: r.label, createdAt: r.createdAt, lastUsedAt: r.lastUsedAt, requests: r.requests || 0, costUSD: r.costUSD || 0 }));
   }
 
   async revokeApiKey(userId, keyId) {
@@ -75,7 +84,15 @@ export class InMemoryStore {
 
   // --- Accounts & sessions (email + password auth) ------------------------
 
-  async createUser({ email, name, passwordHash, plan = 'free', role = 'user' }) {
+  _newReferralCode() {
+    let code;
+    do {
+      code = Math.random().toString(36).slice(2, 10);
+    } while (this.usersByReferralCode.has(code));
+    return code;
+  }
+
+  async createUser({ email, name, passwordHash, plan = 'free', role = 'user', referredBy = null }) {
     const key = String(email).trim().toLowerCase();
     if (this.usersByEmail.has(key)) throw new Error('An account with that email already exists.');
     const user = {
@@ -88,15 +105,23 @@ export class InMemoryStore {
       stripeCustomerId: null,
       subscriptionStatus: null,
       topupUSD: 0,
+      referralCode: this._newReferralCode(),
+      referredBy: referredBy || null,
       createdAt: Date.now(),
     };
     this.users.set(user.id, user);
     this.usersByEmail.set(key, user.id);
+    this.usersByReferralCode.set(user.referralCode, user.id);
     return user;
   }
 
   async getUserByEmail(email) {
     const id = this.usersByEmail.get(String(email).trim().toLowerCase());
+    return id ? this.users.get(id) : null;
+  }
+
+  async getUserByReferralCode(code) {
+    const id = this.usersByReferralCode.get(String(code || '').trim());
     return id ? this.users.get(id) : null;
   }
 
