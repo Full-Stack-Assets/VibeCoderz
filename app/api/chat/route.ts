@@ -40,39 +40,28 @@ export async function POST(req: Request) {
     )
   }
 
-  // Auth + credit gating is opt-in via NEXT_PUBLIC_BILLING_ENABLED. When off,
-  // the app is usable anonymously with no metering.
-  let userId: string | null = null
-  if (BILLING_ENABLED) {
-    const session = await getSessionUser()
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Please sign in to start building.' },
-        { status: 401 }
-      )
-    }
-
-    const db = await getDb()
-    const user = await db.query.users.findFirst({
-      where: eq(schema.users.id, session.sub),
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Please sign in to start building.' },
-        { status: 401 }
-      )
-    }
-
-    if (user.creditsBalance <= 0) {
-      return NextResponse.json(
-        { error: "You're out of credits. Add more to keep building." },
-        { status: 402 }
-      )
-    }
-
-    userId = user.id
+  // Authentication is ALWAYS required (creating sandboxes + spending model
+  // budget can't be anonymous). Credit METERING stays opt-in via
+  // NEXT_PUBLIC_BILLING_ENABLED — when off, signed-in users simply aren't
+  // charged, but they must still be signed in.
+  const session = await getSessionUser()
+  if (!session) {
+    return NextResponse.json({ error: 'Please sign in to start building.' }, { status: 401 })
   }
+  const db = await getDb()
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.id, session.sub),
+  })
+  if (!user) {
+    return NextResponse.json({ error: 'Please sign in to start building.' }, { status: 401 })
+  }
+  if (BILLING_ENABLED && user.creditsBalance <= 0) {
+    return NextResponse.json(
+      { error: "You're out of credits. Add more to keep building." },
+      { status: 402 }
+    )
+  }
+  const userId = user.id
 
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
@@ -124,9 +113,9 @@ export async function POST(req: Request) {
             })
           ),
           stopWhen: stepCountIs(20),
-          tools: tools({ modelId, writer }),
+          tools: tools({ modelId, writer, userId }),
           onFinish: async ({ totalUsage }) => {
-            if (!userId) return
+            if (!BILLING_ENABLED) return
             try {
               const credits = creditsForUsage(modelId, {
                 inputTokens: totalUsage.inputTokens,

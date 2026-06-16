@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { Sandbox } from '@vercel/sandbox'
+import { requireUser, unauthorized, userOwnsSandbox } from '@/lib/authz'
 
 interface Params {
   sandboxId: string
@@ -10,7 +11,15 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<Params> }
 ) {
+  const user = await requireUser()
+  if (!user) return unauthorized()
+
   const logParams = await params
+  // Only the sandbox's owner may stream its command logs.
+  if (!(await userOwnsSandbox(user.id, logParams.sandboxId))) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const encoder = new TextEncoder()
   const sandbox = await Sandbox.get(logParams)
   const command = await sandbox.getCommand(logParams.cmdId)

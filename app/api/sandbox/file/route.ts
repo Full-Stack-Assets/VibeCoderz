@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { Sandbox } from '@vercel/sandbox'
+import { requireUser, unauthorized, userOwnsSandbox } from '@/lib/authz'
 
 export async function GET(req: Request) {
+  const user = await requireUser()
+  if (!user) return unauthorized()
+
   const { searchParams } = new URL(req.url)
   const sandboxId = searchParams.get('sandboxId')
   const filePath = searchParams.get('path')
@@ -13,6 +17,11 @@ export async function GET(req: Request) {
   // Prevent path traversal
   if (filePath.includes('..')) {
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+  }
+
+  // Only the sandbox's owner may read its files.
+  if (!(await userOwnsSandbox(user.id, sandboxId))) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
   try {

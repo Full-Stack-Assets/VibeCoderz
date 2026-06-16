@@ -1,28 +1,33 @@
 import { getDb, schema } from '@/db/client'
+import { eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkBotId } from 'botid/server'
+import { requireUser, unauthorized } from '@/lib/authz'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
+  const user = await requireUser()
+  if (!user) return unauthorized()
   try {
     const db = await getDb()
+    // Scope to the caller's own projects — never the whole table.
     const projects = await db.query.projects.findMany({
+      where: eq(schema.projects.userId, user.id),
       orderBy: (projects, { desc }) => [desc(projects.createdAt)],
     })
     return NextResponse.json(projects)
   } catch (error) {
     console.error('Failed to fetch projects:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch projects' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
   }
 }
 
 export async function POST(req: NextRequest) {
-  const checkResult = await checkBotId()
-  if (checkResult.isBot) {
+  const check = await checkBotId()
+  if (check.isBot) {
     return NextResponse.json({ error: 'Bot detected' }, { status: 403 })
   }
+  const user = await requireUser()
+  if (!user) return unauthorized()
 
   try {
     const body = await req.json()
@@ -32,6 +37,7 @@ export async function POST(req: NextRequest) {
     const result = await db
       .insert(schema.projects)
       .values({
+        userId: user.id, // stamp ownership on every new project
         name,
         description,
         prompt,
@@ -45,9 +51,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result[0], { status: 201 })
   } catch (error) {
     console.error('Failed to create project:', error)
-    return NextResponse.json(
-      { error: 'Failed to create project' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
   }
 }
