@@ -10,16 +10,19 @@ import { saveProjectTool } from './save-project'
 interface Params {
   modelId: string
   writer: UIMessageStreamWriter<UIMessage<never, DataPart>>
+  // The authenticated owner — sandboxes and saved projects are stamped with it
+  // so the resource endpoints can authorize access.
+  userId: string
 }
 
-export function tools({ modelId, writer }: Params) {
+export function tools({ modelId, writer, userId }: Params) {
   return {
-    createSandbox: createSandbox({ writer }),
+    createSandbox: createSandbox({ writer, userId }),
     generateFiles: generateFiles({ writer, modelId }),
     getSandboxURL: getSandboxURL({ writer }),
     runCommand: runCommand({ writer }),
     pushToGithub: pushToGithubTool,
-    saveProject: saveProjectTool,
+    saveProject: saveProjectTool({ userId }),
   }
 }
 

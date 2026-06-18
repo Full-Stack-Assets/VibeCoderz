@@ -29,6 +29,10 @@ export const creditLedger = sqliteTable('credit_ledger', {
 
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+  // Owner of the project. Nullable so pre-existing rows (created before
+  // ownership existed) don't break; all new projects set it, and every
+  // project/sandbox endpoint authorizes against it.
+  userId: text('user_id'),
   name: text('name').notNull(),
   description: text('description'),
   prompt: text('prompt').notNull(),
@@ -39,6 +43,31 @@ export const projects = sqliteTable('projects', {
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   modelUsed: text('model_used'),
   status: text('status').default('completed'),
+})
+
+// Maps a Vercel Sandbox to its owner, recorded at creation time, so the
+// sandbox file/command endpoints can authorize access (a sandbox id is
+// guessable/enumerable, so "logged in" is not enough — it must be YOUR sandbox).
+export const sandboxes = sqliteTable('sandboxes', {
+  sandboxId: text('sandbox_id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+})
+
+// Single-use email sign-in challenges (magic link + 6-digit OTP). Only HASHES
+// of the token/code are stored; the plaintext is emailed and never persisted.
+// A row is created on /api/auth/request and consumed on /api/auth/verify.
+export const loginTokens = sqliteTable('login_tokens', {
+  id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+  email: text('email').notNull(),
+  codeHash: text('code_hash').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: integer('expires_at').notNull(), // epoch ms
+  consumedAt: integer('consumed_at'), // epoch ms; set once used
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
 
 export const projectFiles = sqliteTable('project_files', {
@@ -97,3 +126,5 @@ export type CreditLedgerEntry = typeof creditLedger.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type ProjectFile = typeof projectFiles.$inferSelect
 export type ChatMessage = typeof chatHistory.$inferSelect
+export type SandboxOwnership = typeof sandboxes.$inferSelect
+export type LoginToken = typeof loginTokens.$inferSelect

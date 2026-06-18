@@ -5,12 +5,14 @@ import { getRichError } from './get-rich-error'
 import { tool } from 'ai'
 import description from './create-sandbox.md'
 import z from 'zod/v3'
+import { getDb, schema } from '@/db/client'
 
 interface Params {
   writer: UIMessageStreamWriter<UIMessage<never, DataPart>>
+  userId: string
 }
 
-export const createSandbox = ({ writer }: Params) =>
+export const createSandbox = ({ writer, userId }: Params) =>
   tool({
     description,
     inputSchema: z.object({
@@ -42,6 +44,16 @@ export const createSandbox = ({ writer }: Params) =>
           timeout: timeout ?? 600000,
           ports,
         })
+
+        // Record ownership so the sandbox file/command endpoints can authorize
+        // access — a sandbox id alone must not grant anyone access.
+        try {
+          await (await getDb())
+            .insert(schema.sandboxes)
+            .values({ sandboxId: sandbox.sandboxId, userId })
+        } catch (err) {
+          console.error('Failed to record sandbox ownership:', err)
+        }
 
         writer.write({
           id: toolCallId,

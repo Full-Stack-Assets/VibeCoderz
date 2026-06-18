@@ -28,10 +28,6 @@ export const runCommand = ({ writer }: Params) =>
         .describe(
           "Array of arguments for the command. Each argument should be a separate string (e.g., ['install', '--verbose'] for npm install --verbose, or ['src/index.js'] to run a file, or ['-la', './src'] to list files). IMPORTANT: Use relative paths (e.g., 'src/file.js') or absolute paths instead of trying to change directories with 'cd' first, since each command runs in a fresh shell session."
         ),
-      sudo: z
-        .boolean()
-        .optional()
-        .describe('Whether to run the command with sudo'),
       wait: z
         .boolean()
         .describe(
@@ -39,7 +35,7 @@ export const runCommand = ({ writer }: Params) =>
         ),
     }),
     execute: async (
-      { sandboxId, command, sudo, wait, args = [] },
+      { sandboxId, command, wait, args = [] },
       { toolCallId }
     ) => {
       writer.write({
@@ -81,7 +77,6 @@ export const runCommand = ({ writer }: Params) =>
           detached: true,
           cmd: command,
           args,
-          sudo,
         })
       } catch (error) {
         const richError = getRichError({

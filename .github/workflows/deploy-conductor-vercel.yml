@@ -24,8 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      PROJECT_ID: prj_y8NXnCPK2lCZJeq1fYTSU37UhLg5
-      TEAM_SLUG: full-stack-assets-projects
+      # Project id + team slug live in repo/org GitHub Variables (Settings →
+      # Secrets and variables → Actions → Variables), not hardcoded here, so the
+      # workflow is portable across forks/environments without code edits.
+      PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
     steps:
       - name: Set Root Directory on the conductor project
         run: |

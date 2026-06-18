@@ -10,12 +10,13 @@ export { SIGNUP_CREDIT_GRANT } from './billing'
 
 function getSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET
-  if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('AUTH_SECRET must be set in production')
-    }
-    // Dev-only fallback so the flow works locally without configuration.
-    return new TextEncoder().encode('dev-insecure-secret-change-me')
+  // Required in EVERY environment — no insecure fallback. A predictable dev
+  // secret lets anyone forge a session cookie, and dev secrets have a way of
+  // reaching shared/preview deployments. Generate one: `openssl rand -base64 32`.
+  if (!secret || secret.length < 16) {
+    throw new Error(
+      'AUTH_SECRET must be set to a strong value (>= 16 chars). Generate one with: openssl rand -base64 32'
+    )
   }
   return new TextEncoder().encode(secret)
 }
