@@ -36,6 +36,10 @@ jobs:
             echo "VERCEL_TOKEN not set — skipping (no-op)."
             exit 0
           fi
+          if [ -z "$PROJECT_ID" ] || [ -z "$TEAM_SLUG" ]; then
+            echo "VERCEL_PROJECT_ID or VERCEL_TEAM_SLUG variable not set — skipping (no-op)."
+            exit 0
+          fi
           code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PATCH \
             "https://api.vercel.com/v9/projects/${PROJECT_ID}?slug=${TEAM_SLUG}" \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
@@ -48,6 +52,7 @@ jobs:
       - name: Dump latest conductor deployment build logs
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then echo "no token"; exit 0; fi
+          if [ -z "$PROJECT_ID" ] || [ -z "$TEAM_SLUG" ]; then echo "PROJECT_ID or TEAM_SLUG not set — skipping (no-op)."; exit 0; fi
           dep=$(curl -sS -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "https://api.vercel.com/v6/deployments?projectId=${PROJECT_ID}&slug=${TEAM_SLUG}&limit=1")
           id=$(printf '%s' "$dep" | jq -r '.deployments[0].uid')
