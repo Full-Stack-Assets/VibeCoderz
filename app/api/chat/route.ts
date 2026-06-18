@@ -19,6 +19,12 @@ import { deductCredits } from '@/lib/credits'
 import { runConductor } from '@/ai/conductor'
 import prompt from './prompt.md'
 
+// Agentic generation streams for minutes (model turns + sandbox tool loops),
+// far past the default serverless function ceiling. Raise the limit so runs
+// aren't truncated mid-stream. The platform clamps this to the plan's maximum
+// (e.g. 300s on Vercel Pro, higher with Fluid Compute).
+export const maxDuration = 300
+
 interface BodyData {
   messages: ChatUIMessage[]
   modelId?: string
