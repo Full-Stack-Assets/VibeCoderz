@@ -1,0 +1,6 @@
+{
+  "name": "VibeCoderz - AI Agent Studio & Conductor",
+  "description": "Full-stack AI vibe coding environment, conductor agent orchestration, multi-panel sandbox preview, interactive terminal, and self-healing error monitor powered by Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
